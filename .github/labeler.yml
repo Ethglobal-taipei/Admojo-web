@@ -1,0 +1,17 @@
+app:
+  - 'app/**'
+components:
+  - 'components/**'
+styles:
+  - 'styles/**'
+public:
+  - 'public/**'
+api:
+  - 'app/api/**'
+libs:
+  - 'lib/**'
+utils:
+  - 'utils/**'
+docs:
+  - 'README.md'
+  - 'LICENSE'
