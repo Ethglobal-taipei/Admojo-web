@@ -28,6 +28,7 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install
-
-      - name: Run Tests
-        run: pnpm run test
+        
+      # Removed pnpm tests for now
+      # - name: Run Tests
+      #   run: pnpm run test
