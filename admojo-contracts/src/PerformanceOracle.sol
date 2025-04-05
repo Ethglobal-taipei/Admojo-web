@@ -16,6 +16,9 @@ contract PerformanceOracle {
 
     // Event for tracking metric updates
     event MetricsUpdated(uint deviceId, uint timestamp, uint views, uint taps);
+    event BatchMetricsUpdated(uint timestamp, uint[] deviceIds, uint[] views, uint[] taps);
+    event BatchViewsUpdated(uint timestamp, uint[] deviceIds, uint[] views);
+    event BatchTapsUpdated(uint timestamp, uint[] deviceIds, uint[] taps);
 
     // Modifier to restrict access to admin (backend)
     modifier onlyAdmin() {
@@ -45,68 +48,90 @@ contract PerformanceOracle {
         deviceFwHash[_deviceId] = _fwHash;
     }
 
-    // =====================================================================
-    // Original updateMetrics (unchanged, if you want to keep it)
-    // =====================================================================
-    function updateMetrics(
-        uint _deviceId,
-        uint _timestamp,
-        uint _views,
-        uint _taps
-    ) external onlyAdmin {
-        metrics[_deviceId][_timestamp] = Metric(_views, _taps);
-        emit MetricsUpdated(_deviceId, _timestamp, _views, _taps);
-    }
 
     // =====================================================================
     // NEW: updateMetricsWithSig - verifies device firmware + signature
     // =====================================================================
-    function updateMetricsWithSig(
-        uint _deviceId,
+    function updateBatchMetrics(
         uint _timestamp,
-        uint _views,
-        uint _taps,
-        bytes32 _firmwareHash,
-        bytes memory _signature
+        uint[] calldata _deviceIds,
+        uint[] calldata _views,
+        uint[] calldata _taps
+    ) external onlyAdmin {
+        require(
+            _deviceIds.length == _views.length && 
+            _views.length == _taps.length,
+            "Arrays must have same length"
+        );
+
+        for (uint i = 0; i < _deviceIds.length; i++) {
+            metrics[_deviceIds[i]][_timestamp] = Metric(_views[i], _taps[i]);
+        }
+
+        emit BatchMetricsUpdated(_timestamp, _deviceIds, _views, _taps);
+    }
+
+    // =====================================================================
+    // NEW: updateBatchMetricsWithSig - verifies device firmware + signature
+    // =====================================================================
+    function updateBatchMetricsWithSig(
+        uint _timestamp,
+        uint[] calldata _deviceIds,
+        uint[] calldata _views,
+        uint[] calldata _taps,
+        bytes32[] calldata _firmwareHashes,
+        bytes[] calldata _signatures
     ) external {
-        // 1) Check that the provided firmware hash matches what's on file
         require(
-            _firmwareHash == deviceFwHash[_deviceId],
-            "Firmware hash mismatch"
+            _deviceIds.length == _views.length && 
+            _views.length == _taps.length &&
+            _taps.length == _firmwareHashes.length &&
+            _firmwareHashes.length == _signatures.length,
+            "Arrays must have same length"
         );
 
-        // 2) Create the message that was signed
-        // The message should include all the parameters that need to be verified
-        bytes32 messageHash = keccak256(
-            abi.encodePacked(
-                _deviceId,
-                _timestamp,
-                _views,
-                _taps,
-                _firmwareHash
-            )
-        );
+        for (uint i = 0; i < _deviceIds.length; i++) {
+            uint deviceId = _deviceIds[i];
+            
+            // 1) Check that the provided firmware hash matches what's on file
+            require(
+                _firmwareHashes[i] == deviceFwHash[deviceId],
+                "Firmware hash mismatch"
+            );
 
-        // 3) Create the EIP-191 signed message hash
-        bytes32 ethSignedMsg = keccak256(
-            abi.encodePacked(
-                "\x19Ethereum Signed Message:\n32",
-                messageHash
-            )
-        );
+            // 2) Create the message that was signed
+            bytes32 messageHash = keccak256(
+                abi.encodePacked(
+                    deviceId,
+                    _timestamp,
+                    _views[i],
+                    _taps[i],
+                    _firmwareHashes[i]
+                )
+            );
 
-        // 4) Recover the signer address from the signature
-        address recovered = _recoverSigner(ethSignedMsg, _signature);
+            // 3) Create the EIP-191 signed message hash
+            bytes32 ethSignedMsg = keccak256(
+                abi.encodePacked(
+                    "\x19Ethereum Signed Message:\n32",
+                    messageHash
+                )
+            );
 
-        // 5) Check that it matches the device's authorized signer
-        require(
-            recovered == deviceSigner[_deviceId],
-            "Signature not from device signer"
-        );
+            // 4) Recover the signer address from the signature
+            address recovered = _recoverSigner(ethSignedMsg, _signatures[i]);
 
-        // 6) If all checks pass, store the metrics
-        metrics[_deviceId][_timestamp] = Metric(_views, _taps);
-        emit MetricsUpdated(_deviceId, _timestamp, _views, _taps);
+            // 5) Check that it matches the device's authorized signer
+            require(
+                recovered == deviceSigner[deviceId],
+                "Signature not from device signer"
+            );
+
+            // 6) If all checks pass, store the metrics
+            metrics[deviceId][_timestamp] = Metric(_views[i], _taps[i]);
+        }
+
+        emit BatchMetricsUpdated(_timestamp, _deviceIds, _views, _taps);
     }
 
     // =====================================================================
@@ -137,10 +162,9 @@ contract PerformanceOracle {
 
     // =====================================================================
     // Additional getters, etc., from your original contract remain unchanged
-    // ...
     // =====================================================================
 
-    // We'll keep your getMetrics and getAggregatedMetrics as is, if you want:
+    // We'll keep your getMetrics as is:
     function getMetrics(
         uint _deviceId,
         uint _timestamp
@@ -149,35 +173,49 @@ contract PerformanceOracle {
         return (metric.views, metric.taps);
     }
 
-    function updateViews(
-        uint _deviceId,
+
+    // =====================================================================
+    // NEW: Batch update views for multiple devices
+    // =====================================================================
+    function updateBatchViews(
         uint _timestamp,
-        uint _views
+        uint[] calldata _deviceIds,
+        uint[] calldata _views
     ) external onlyAdmin {
-        Metric memory existing = metrics[_deviceId][_timestamp];
-        existing.views = _views;
-        metrics[_deviceId][_timestamp] = existing;
-        emit MetricsUpdated(
-            _deviceId,
-            _timestamp,
-            existing.views,
-            existing.taps
+        require(
+            _deviceIds.length == _views.length,
+            "Arrays must have same length"
         );
+
+        for (uint i = 0; i < _deviceIds.length; i++) {
+            uint deviceId = _deviceIds[i];
+            uint viewCount = _views[i];
+            metrics[deviceId][_timestamp].views = viewCount;
+        }
+
+        emit BatchViewsUpdated(_timestamp, _deviceIds, _views);
     }
 
-    function updateTaps(
-        uint _deviceId,
+
+    // =====================================================================
+    // NEW: Batch update taps for multiple devices
+    // =====================================================================
+    function updateBatchTaps(
         uint _timestamp,
-        uint _taps
+        uint[] calldata _deviceIds,
+        uint[] calldata _taps
     ) external onlyAdmin {
-        Metric memory existing = metrics[_deviceId][_timestamp];
-        existing.taps = _taps;
-        metrics[_deviceId][_timestamp] = existing;
-        emit MetricsUpdated(
-            _deviceId,
-            _timestamp,
-            existing.views,
-            existing.taps
+        require(
+            _deviceIds.length == _taps.length,
+            "Arrays must have same length"
         );
+
+        for (uint i = 0; i < _deviceIds.length; i++) {
+            uint deviceId = _deviceIds[i];
+            uint tapCount = _taps[i];
+            metrics[deviceId][_timestamp].taps = tapCount;
+        }
+
+        emit BatchTapsUpdated(_timestamp, _deviceIds, _taps);
     }
 }
