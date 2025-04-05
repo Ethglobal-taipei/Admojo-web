@@ -267,6 +267,6 @@ export default function ProviderLocations() {
       </Card>
     </div>
   );
-}
+  }
   
   
