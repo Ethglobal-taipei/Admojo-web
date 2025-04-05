@@ -185,62 +185,100 @@ export default function ProviderDashboardPage() {
         
         {isConnected && service ? (
           <>
-            {/* Provider information card styled like the old file */}
-            <Card className="mb-8 border-[3px] border-black rounded-none shadow-[4px_4px_0_0_rgba(0,0,0,1)]">
-              <CardHeader className="border-b-2 border-gray-100">
-                <CardTitle className="text-2xl flex items-center">
-                  <Building2 className="mr-2 h-6 w-6" />
-                  {provider.businessName}
-                </CardTitle>
-                <CardDescription>Provider Account Details</CardDescription>
-              </CardHeader>
-              <CardContent className="pt-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div>
-                    <h3 className="font-semibold text-sm text-gray-500 mb-1">Business Information</h3>
-                    <div className="space-y-2">
-                      <p><span className="font-medium">Type:</span> {provider.businessType}</p>
-                      <p><span className="font-medium">Email:</span> {provider.businessEmail}</p>
-                      <p><span className="font-medium">Address:</span> {provider.businessAddress}</p>
-                    </div>
+            {/* Provider information card - themed */}
+            <div className="mb-8 border-[4px] border-black bg-white shadow-[8px_8px_0_0_rgba(0,0,0,1)] hover:shadow-[10px_10px_0_0_rgba(0,0,0,1)] transition-all duration-300">
+              {/* Header with background color */}
+              <div className="bg-[#0055FF] border-b-[4px] border-black p-4">
+                <div className="flex items-center">
+                  <div className="bg-white w-12 h-12 flex items-center justify-center mr-4 border-[3px] border-black shadow-[2px_2px_0_0_rgba(0,0,0,1)]">
+                    <Building2 className="h-6 w-6" />
                   </div>
                   <div>
-                    <h3 className="font-semibold text-sm text-gray-500 mb-1">Payment Details</h3>
-                    <div className="space-y-2">
-                      <p><span className="font-medium">Method:</span> {provider.paymentMethod}</p>
+                    <h2 className="text-2xl font-black text-white">{provider.businessName}</h2>
+                    <p className="text-[#CCDDFF] font-bold">Provider Account Details</p>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="p-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {/* Business Information */}
+                  <div className="border-[3px] border-black p-4 bg-[#f5f5f5] shadow-[4px_4px_0_0_rgba(0,0,0,0.3)]">
+                    <h3 className="font-black text-sm uppercase mb-3 border-b-[2px] border-black pb-2">Business Information</h3>
+                    <div className="space-y-3">
+                      <div className="flex">
+                        <span className="font-bold w-24">Type:</span> 
+                        <span className="font-medium">{provider.businessType}</span>
+                      </div>
+                      <div className="flex">
+                        <span className="font-bold w-24">Email:</span> 
+                        <span className="font-medium">{provider.businessEmail}</span>
+                      </div>
+                      <div className="flex">
+                        <span className="font-bold w-24">Address:</span> 
+                        <span className="font-medium">{provider.businessAddress}</span>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {/* Payment Details */}
+                  <div className="border-[3px] border-black p-4 bg-[#f5f5f5] shadow-[4px_4px_0_0_rgba(0,0,0,0.3)]">
+                    <h3 className="font-black text-sm uppercase mb-3 border-b-[2px] border-black pb-2">Payment Details</h3>
+                    <div className="space-y-3">
+                      <div className="flex">
+                        <span className="font-bold w-24">Method:</span> 
+                        <span className="font-medium">{provider.paymentMethod}</span>
+                      </div>
                       {provider.paymentMethod === 'crypto' && provider.walletAddress && (
-                        <p>
-                          <span className="font-medium">Wallet:</span> 
-                          <span className="font-mono text-sm">{provider.walletAddress}</span>
-                        </p>
+                        <div className="flex flex-col">
+                          <span className="font-bold mb-1">Wallet:</span> 
+                          <span className="font-mono text-sm bg-white border-[2px] border-black p-2 break-all shadow-[2px_2px_0_0_rgba(0,0,0,1)]">
+                            {provider.walletAddress}
+                          </span>
+                        </div>
                       )}
                       {provider.paymentMethod === 'bank' && (
                         <>
-                          <p><span className="font-medium">Bank:</span> {provider.bankName}</p>
-                          <p><span className="font-medium">Account:</span> {provider.accountNumber}</p>
+                          <div className="flex">
+                            <span className="font-bold w-24">Bank:</span> 
+                            <span className="font-medium">{provider.bankName}</span>
+                          </div>
+                          <div className="flex">
+                            <span className="font-bold w-24">Account:</span> 
+                            <span className="font-medium">{provider.accountNumber}</span>
+                          </div>
                         </>
                       )}
-                      {provider.taxId && <p><span className="font-medium">Tax ID:</span> {provider.taxId}</p>}
+                      {provider.taxId && (
+                        <div className="flex">
+                          <span className="font-bold w-24">Tax ID:</span> 
+                          <span className="font-medium">{provider.taxId}</span>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
                 
-                {/* Verification info */}
-                <div className="mt-6 pt-6 border-t border-gray-100">
-                  <h3 className="font-semibold text-sm text-gray-500 mb-2">Verification Status</h3>
-                  <div className="bg-green-50 border border-green-200 rounded-md p-3">
-                    <p className="flex items-center text-green-600">
-                      <FileText className="mr-2 h-5 w-5" />
-                      Verified via {provider.selfVerified ? 'Self Protocol' : 'Document Upload'}
-                      {provider.selfVerificationName && ` as ${provider.selfVerificationName}`}
+                {/* Verification info - themed */}
+                <div className="mt-6 pt-6 border-t-[2px] border-dashed border-black">
+                  <h3 className="font-black text-sm uppercase mb-3">Verification Status</h3>
+                  <div className="border-[3px] border-black bg-[#EAFFF2] p-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)]">
+                    <p className="flex items-center font-bold">
+                      <div className="bg-[#00CC66] w-8 h-8 flex items-center justify-center mr-3 border-[2px] border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+                        <FileText className="h-5 w-5 text-white" />
+                      </div>
+                      <span>
+                        Verified via <span className="text-[#00CC66]">{provider.selfVerified ? 'Self Protocol' : 'Document Upload'}</span>
+                        {provider.selfVerificationName && <span className="font-black"> as {provider.selfVerificationName}</span>}
+                      </span>
                     </p>
                   </div>
                 </div>
-              </CardContent>
-            </Card>
+              </div>
+            </div>
             
             {/* Components from the older file */}
-            <DisplayOverview />
+            {/* <DisplayOverview /> */}
             <DisplayRegistration />
             <DisplayPerformance />
             <VerificationManagement />

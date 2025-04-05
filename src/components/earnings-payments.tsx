@@ -18,6 +18,7 @@ import {
   Loader,
 } from "lucide-react"
 import { Hash } from "viem"
+import { getUserTokenBalance } from "@/lib/services/tokenomics.service"
 
 // Define interface for payment history item
 interface PaymentHistoryItem {
@@ -59,6 +60,10 @@ export default function EarningsPayments() {
   const [isLoadingEarnings, setIsLoadingEarnings] = useState(false)
   const [isWithdrawing, setIsWithdrawing] = useState(false)
   const [withdrawTxHash, setWithdrawTxHash] = useState<Hash | null>(null)
+  
+  // State for Metal API balance
+  const [metalBalance, setMetalBalance] = useState<number | null>(null)
+  const [isLoadingMetalBalance, setIsLoadingMetalBalance] = useState(false)
 
   // Function to fetch earnings data
   const fetchEarningsData = useCallback(async () => {
@@ -246,6 +251,33 @@ export default function EarningsPayments() {
     }
   }, [transactions, withdrawTxHash, fetchEarningsData])
   
+  // Fetch Metal API balance
+  useEffect(() => {
+    const fetchMetalBalance = async () => {
+      if (!authenticated || !user?.wallet?.address) return
+      
+      try {
+        setIsLoadingMetalBalance(true)
+        const tokenBalance = await getUserTokenBalance(user.wallet.address)
+        
+        if (tokenBalance) {
+          setMetalBalance(tokenBalance.balance)
+        } else {
+          // If balance couldn't be fetched, show null
+          console.log("No Metal API balance data returned")
+          setMetalBalance(null)
+        }
+      } catch (error) {
+        console.error("Error fetching Metal API balance:", error)
+        setMetalBalance(null)
+      } finally {
+        setIsLoadingMetalBalance(false)
+      }
+    }
+    
+    fetchMetalBalance()
+  }, [authenticated, user?.wallet?.address])
+  
   // Function to withdraw earnings
   const handleWithdrawEarnings = async () => {
     if (!authenticated || !user?.wallet?.address) {
@@ -351,13 +383,45 @@ export default function EarningsPayments() {
             </Button>
           </div>
 
+          {/* Metal API Balance Card */}
+          <div className="border-[4px] border-black bg-[#f0f9ff] p-4 mb-6">
+            <div className="flex items-center justify-between mb-1">
+              <div className="text-sm font-medium">Metal API Balance</div>
+              {isLoadingMetalBalance && <Loader className="w-4 h-4 animate-spin" />}
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <div className="text-3xl font-black flex items-center">
+                  <DollarSign className="w-6 h-6 mr-1" />
+                  {isLoadingMetalBalance 
+                    ? "Loading..." 
+                    : metalBalance !== null 
+                      ? `${metalBalance.toLocaleString()} ADC` 
+                      : "N/A"}
+                </div>
+                <div className="text-xs text-gray-500 mt-1">Your ADC token balance from Metal API</div>
+              </div>
+              <div>
+                <div className="text-3xl font-black flex items-center text-green-600">
+                  <DollarSign className="w-6 h-6 mr-1" />
+                  {isLoadingMetalBalance 
+                    ? "Loading..." 
+                    : metalBalance !== null 
+                      ? `${(metalBalance / 2.35).toFixed(2)} USDC` 
+                      : "N/A"}
+                </div>
+                <div className="text-xs text-gray-500 mt-1">Equivalent USDC value (1 USDC = 2.35 ADC)</div>
+              </div>
+            </div>
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
             <div className="border-[4px] border-black bg-[#f5f5f5] p-4">
               <div className="text-sm font-medium mb-1">Total Earnings</div>
               <div className="text-3xl font-black flex items-center">
                 <DollarSign className="w-6 h-6 mr-1" />
                 {earningsData.totalEarnings.toLocaleString()} <span className="text-lg ml-1">ADC</span>
-        </div>
+              </div>
               <div className="flex items-center gap-1 text-sm font-bold mt-2 text-green-600">
                 <TrendingUp className="w-4 h-4" />
                 <span>+15.2% from last month</span>
@@ -369,7 +433,7 @@ export default function EarningsPayments() {
               <div className="text-3xl font-black flex items-center">
                 <DollarSign className="w-6 h-6 mr-1" />
                 {earningsData.pendingPayment.toLocaleString()} <span className="text-lg ml-1">ADC</span>
-                  </div>
+              </div>
               <div className="text-sm font-medium mt-2">
                 Next payout: {new Date(Date.now() + 7*24*60*60*1000).toLocaleDateString()}
               </div>
@@ -410,8 +474,8 @@ export default function EarningsPayments() {
                   <span>WITHDRAW NOW</span>
                 </>
               )}
-              </Button>
-            </div>
+            </Button>
+          </div>
 
           <div className="mt-4 flex items-center gap-2 text-sm font-medium text-gray-600">
             <InfoIcon className="w-4 h-4" />
@@ -460,8 +524,8 @@ export default function EarningsPayments() {
                     <ExternalLink className="w-3 h-3" />
                   </a>
                 </div>
-                  </div>
-                ))}
+              </div>
+            ))}
 
             {earningsData.paymentHistory.length === 0 && (
               <div className="border-[3px] border-black p-6 text-center">
