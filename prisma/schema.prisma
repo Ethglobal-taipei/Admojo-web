@@ -15,10 +15,12 @@ datasource db {
 
 // User model to track both advertisers and providers
 model User {
-  id            String   @id @default(cuid())
-  name          String
+  id            String     @id @default(uuid())
+  name          String?
   username      String   @unique
-  email         String?  @unique
+  email         String?    @unique
+  emailVerified DateTime?
+  image         String?
   avatar        String?
   role          String   @default("Advertiser")
   memberSince   DateTime @default(now())
@@ -27,15 +29,15 @@ model User {
   holderAddress String?  @unique
   walletType    String?
   linkedWallets Json?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+  provider      Provider?
 
   // Relations
   balances     Balance?
   transactions Transaction[]
   settings     UserSettings?
   stats        UserStats?
-  provider     Provider?
   campaigns    Campaign[]
 }
 
@@ -88,20 +90,30 @@ enum UserRole {
 
 // Provider model for ad display service providers
 model Provider {
-  id              String         @id @default(uuid())
-  userId          String         @unique
-  user            User           @relation(fields: [userId], references: [id], onDelete: Cascade)
-  createdAt       DateTime       @default(now())
-  updatedAt       DateTime       @updatedAt
-  isActive        Boolean        @default(true)
-  walletAddress   String         @unique // Blockchain address for this provider
-  holderAddress   String         @unique
-  stakedAmount    Float          @default(0)
-  stakingDate     DateTime?
-  locations       Location[]
-  metadata        Json?          // Additional provider details
-  earningsTotal   Float          @default(0)
-  earningsPerDay  Json?          // Track daily earnings
+  id                   String     @id @default(uuid())
+  userId               String     @unique
+  user                 User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  businessName         String
+  businessType         String
+  businessAddress      String
+  businessEmail        String
+  paymentMethod        String
+  walletAddress        String?    
+  bankName             String?
+  accountNumber        String?
+  taxId                String?
+  selfVerified         Boolean    @default(false)
+  selfVerificationName String?
+  createdAt            DateTime   @default(now())
+  updatedAt            DateTime   @updatedAt
+  isActive             Boolean    @default(true)
+  holderAddress        String?    @unique
+  stakedAmount         Float      @default(0)
+  stakingDate          DateTime?
+  locations            Location[]
+  metadata             Json?      // Additional provider details
+  earningsTotal        Float      @default(0)
+  earningsPerDay       Json?      // Track daily earnings
   
   @@index([walletAddress])
 }

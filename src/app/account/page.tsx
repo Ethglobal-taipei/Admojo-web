@@ -10,7 +10,6 @@ import { Progress } from "@/components/ui/progress"
 import { useUserStore, useTransactionStore } from "@/lib/store"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Checkbox } from "@/components/ui/checkbox"
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert"
 import { Switch } from "@/components/ui/switch"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
@@ -32,7 +31,6 @@ interface PasswordFormData {
 export default function AccountPage() {
   const [activeTab, setActiveTab] = useState("transactions")
   const [isEditing, setIsEditing] = useState(false)
-  const [showPasswordDialog, setShowPasswordDialog] = useState(false)
   const [isSettingsChanged, setIsSettingsChanged] = useState(false)
   const [formError, setFormError] = useState("")
   
@@ -884,4 +882,3 @@ export default function AccountPage() {
     </div>
   )
 }
-

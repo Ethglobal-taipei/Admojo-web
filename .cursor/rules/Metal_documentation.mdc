@@ -1,0 +1,204 @@
+---
+description: Referring to the documentation
+globs: 
+alwaysApply: false
+---
+# Metal Token Cloud API Documentation
+
+## Overview
+Metal is the simplest way to tokenize your app. Create and distribute tokens to your users in a few lines of code. We manage all the crypto complexity behind a set of simple APIs, so you can focus on building amazing user experiences.
+
+## Why Tokenize?
+
+### Benefits
+- **Increase Engagement**: Use tokens to incentivize active user engagement
+- **Distribute Tokens**: Encourage higher quality user-generated content
+- **Increase Retention**: Users that earn while using your app are more likely to return
+- **Earn Fees**: Earn a 0.5% fee every time tokens are bought and sold
+
+## API Endpoints
+
+### Merchant API
+
+#### Create Token
+**Endpoint**: `POST api.metal.build/merchant/create-token`
+
+##### Required Attributes
+| Name | Type | Description |
+|------|------|-------------|
+| `name` | string | The name for your token (e.g., "Test Token") |
+| `symbol` | string | The ticker symbol for your token (e.g., "TEST") |
+
+##### Optional Attributes
+| Name | Type | Description |
+|------|------|-------------|
+| `canDistribute` | boolean | Enable distribution functionality for this token |
+| `canLP` | boolean | Enable liquidity pool creation for this token |
+| `merchantAddress` | string | Address to receive merchant token allocation (fixed at 5% of total supply) |
+
+##### Example Request
+```javascript
+const response = await fetch('https://api.metal.build/merchant/create-token', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'x-api-key': 'YOUR-API-KEY',
+  },
+  body: JSON.stringify({
+    name: 'Test Token',
+    symbol: 'TEST',
+    merchantAddress: '0x1234567890abcdef1234567890abcdef12345678',
+    canDistribute: true,
+    canLP: true
+  }),
+})
+
+const token = await response.json()
+```
+
+##### Check Token Creation Status
+**Endpoint**: `GET api.metal.build/merchant/create-token/status/:jobId`
+
+### Token API
+
+#### Get Token with Holders
+**Endpoint**: `GET api.metal.build/token/:address`
+
+##### Response Attributes
+| Name | Type | Description |
+|------|------|-------------|
+| `id` | string | Token ID |
+| `address` | string | Contract address |
+| `name` | string | Token name |
+| `symbol` | string | Ticker symbol |
+| `totalSupply` | number | Total token supply |
+| `price` | number | Current token price in USD |
+| `holders` | array | List of token holders |
+
+#### Distribute Tokens
+Distribute tokens to your users on Base. This endpoint allows you to distribute tokens from your app balance to specified addresses.
+**Endpoint**: `POST api.metal.build/token/:address/distribute`
+
+##### Required Attributes
+| Name | Type | Description |
+|------|------|-------------|
+| `sendTo` | string | Recipient address |
+| `amount` | number | Number of tokens to distribute |
+
+##### Example Request
+```javascript
+const response = await fetch(
+  'https://api.metal.build/token/0x1234567890abcdef1234567890abcdef12345678/distribute',
+  {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': 'YOUR-API-KEY',
+    },
+    body: JSON.stringify({
+      sendTo: '0xabcdef1234567890abcdef1234567890abcdef12',
+      amount: 100
+    }),
+  }
+)
+
+const distribute = await response.json()
+```
+
+### Holder API
+
+#### Get Holder
+This endpoint returns all token balances and related information for a specific holder.
+**Endpoint**: `GET api.metal.build/holder/:id?publicKey=:publicKey`
+
+##### Response Attributes
+| Name | Type | Description |
+|------|------|-------------|
+| `id` | string | Holder ID |
+| `address` | string | Holder's address |
+| `totalValue` | number | Total value of token holdings in USD |
+| `tokens` | array | List of token holdings |
+
+#### Get or Create Holder
+Get Or Create a holder for your organization. Holder wallets can be created for your customers with an external id of your choice.
+**Endpoint**: `PUT api.metal.build/holder/:userId`
+##### Example Request
+```javascript
+const response = await fetch(`https://api.metal.build/holder/${userId}`, {
+method: 'PUT',
+headers: {
+  'Content-Type': 'application/json',
+  'x-api-key': 'YOUR-API-KEY',
+  },
+})
+
+const holder = await response.json()
+```
+
+#### Withdraw Tokens
+This endpoint allows you to withdraw tokens from a holders account to a specified address.
+**Endpoint**: `POST api.metal.build/holder/:userId/withdraw`
+
+##### Required Attributes
+| Name | Type | Description |
+|------|------|-------------|
+| `tokenAddress` | string | Token contract address |
+| `amount` | number | Amount to withdraw |
+| `toAddress` | string | Destination address |
+
+##### Example Request
+```javascript
+const response = await fetch(
+  `https://api.metal.build/holder/${userId}/withdraw`,
+  {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': 'YOUR-API-KEY',
+    },
+    body: JSON.stringify({
+        tokenAddress: '0x191d25c061C081583E616d8978eA670f45A803E5',
+        amount: 123,
+        toAddress: '0x191d25c061C081583E616d8978eA670f45A12345',
+      }),
+  }
+)
+
+const withdraw = await response.json()
+```
+
+#### Spend Tokens
+This endpoint allows you to spend tokens from a holders account.
+**Endpoint**: `POST api.metal.build/holder/:userId/spend`
+
+##### Required Attributes
+| Name | Type | Description |
+|------|------|-------------|
+| `tokenAddress` | string | Token contract address |
+| `amount` | number | Amount to spend |
+##### Example Request
+```javascript
+const response = await fetch(
+  `https://api.metal.build/holder/${userId}/spend`,
+  {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': 'YOUR-API-KEY',
+    },
+    body: JSON.stringify({
+      tokenAddress: '0x191d25c061C081583E616d8978eA670f45A803E5',
+      amount: 123,
+    }),
+  }
+)
+
+const spend = await response.json()
+```
+## Authentication
+- Use the `x-api-key` header with your API key for all requests
+- API keys can be obtained from Metal
+
+## Notes
+- All examples use placeholder addresses and should be replaced with actual values
+- Ensure you have the necessary permissions and API key before making requests

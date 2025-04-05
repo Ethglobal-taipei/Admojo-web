@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getUserIdentifier, SelfBackendVerifier, countryCodes } from '@selfxyz/core';
+import { getUserIdentifier, SelfBackendVerifier } from '@selfxyz/core';
 
 export async function POST(req: NextRequest) {
   try {
@@ -17,21 +17,21 @@ export async function POST(req: NextRequest) {
     const userId = await getUserIdentifier(publicSignals);
     console.log("Extracted userId:", userId);
 
-    // Initialize and configure the verifier
+    // Initialize and configure the verifier - test mode configuration
     const selfBackendVerifier = new SelfBackendVerifier(
-      'https://forno.celo.org',
-      'adnet-protocol' // Use a consistent scope across frontend and backend
+      'adnet-protocol',
+      'https://3b28-111-235-226-124.ngrok-free.app',
+      'uuid',
+      true, // Enable dev mode for testing
+      true  // Use mock passport for testing
     );
     
     // Configure verification options
     selfBackendVerifier.setMinimumAge(18);
-    selfBackendVerifier.excludeCountries(
-      countryCodes.IRN,   // Iran
-      countryCodes.PRK,   // North Korea
-      countryCodes.RUS    // Russia
-    );
-    selfBackendVerifier.enableNameAndDobOfacCheck();
-
+    // selfBackendVerifier.excludeCountries(
+    //   countryCodes.PRK,   // North Korea
+    // );
+    // selfBackendVerifier.enableNameAndDobOfacCheck();`
     // Verify the proof
     const result = await selfBackendVerifier.verify(proof, publicSignals);
     

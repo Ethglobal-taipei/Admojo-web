@@ -3,8 +3,10 @@ declare module '@selfxyz/qrcode' {
     appName: string;
     scope: string;
     endpoint: string;
+    endpointType?: string;
     logoBase64?: string;
     userId: string;
+    devMode?: boolean;
     disclosures?: {
       issuing_state?: boolean;
       name?: boolean;
@@ -47,7 +49,7 @@ declare module '@selfxyz/core' {
   }
 
   export class SelfBackendVerifier {
-    constructor(rpcUrl: string, scope: string);
+    constructor(scope: string, endpoint: string, identityType?: string, devMode?: boolean, mockPassport?: boolean);
     setMinimumAge(age: number): void;
     excludeCountries(...countries: string[]): void;
     enableNameAndDobOfacCheck(): void;
