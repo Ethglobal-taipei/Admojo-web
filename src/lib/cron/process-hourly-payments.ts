@@ -19,17 +19,16 @@ interface BoothMetrics {
 // Main function to process hourly payments
 export async function processHourlyPayments() {
   try {
-    // Get current time and calculate the previous 5-minute slot
-    // (since we run with a 2-minute buffer, we need to look at the previous slot)
+    // Get current time and calculate the current 5-minute slot
     const now = new Date();
     const currentMinute = now.getMinutes();
-    const previousSlotMinute = Math.floor((currentMinute - 2) / 5) * 5;
+    const currentSlotMinute = Math.floor(currentMinute / 5) * 5;
     const timeSlot = new Date(
       now.getFullYear(),
       now.getMonth(),
       now.getDate(),
       now.getHours(),
-      previousSlotMinute
+      currentSlotMinute
     ).toISOString();
     
     console.log(`Processing payments for time slot: ${timeSlot} (current time: ${now.toISOString()})`);
