@@ -7,11 +7,13 @@ import { holesky } from 'viem/chains';
 import { toast } from '@/lib/toast';
 
 import { 
-  AdNetBlockchainService, 
-  createBlockchainService,
   TransactionStatus,
   TransactionState,
   TransactionReceipt
+} from '@/lib/blockchain/types';
+import { 
+  AdNetBlockchainService, 
+  createBlockchainService 
 } from '@/lib/blockchain';
 
 // Target chain information
@@ -149,20 +151,25 @@ export function BlockchainProvider({ children }: { children: React.ReactNode }) 
       }
       
       try {
-        // Create blockchain service
-        const blockchainService = createBlockchainService(
-          custom(provider),
-          walletAddress
-        );
-        
-        // Connect to the blockchain
-        await blockchainService.connect();
-        
-        // Set the service
-        setService(blockchainService);
-        
-        // Set up transaction listener
-        blockchainService.addTransactionListener(handleTransactionUpdate);
+        // Check if createBlockchainService is available (might not be in client environment)
+        if (typeof createBlockchainService === 'function') {
+          // Create blockchain service
+          const blockchainService = createBlockchainService(
+            custom(provider),
+            walletAddress
+          );
+          
+          // Connect to the blockchain
+          await blockchainService.connect();
+          
+          // Set the service
+          setService(blockchainService);
+          
+          // Set up transaction listener
+          blockchainService.addTransactionListener(handleTransactionUpdate);
+        } else {
+          console.warn('createBlockchainService is not available in this environment');
+        }
         
         // Check chain and prompt to switch if needed
         const chainIdHex = await provider.request({ method: 'eth_chainId' });
