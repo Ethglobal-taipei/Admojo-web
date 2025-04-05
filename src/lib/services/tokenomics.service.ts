@@ -1,4 +1,5 @@
 import { toast } from "@/lib/toast";
+import { ADC_TOKEN_ADDRESS } from "@/app/api/metal/route";
 
 /**
  * Calls the backend API to create a Metal holder account for a given user ID.
@@ -510,5 +511,243 @@ export async function createAndFundCampaignHolder(
       description: "There was an error setting up your campaign's token allocation." 
     }, "error");
     return false;
+  }
+}
+
+/**
+ * Interface for token balance response from Metal API
+ */
+interface TokenBalanceResponse {
+  name: string;       // The name of the token
+  symbol: string;     // The token's symbol
+  id: string;         // The token's contract address
+  address: string;    // The token's contract address (same as id)
+  balance: number;    // The holder's token balance
+  value: number | null; // The holder's token balance in USD (null if no liquidity)
+}
+
+/**
+ * Gets the token balance for a specific holder address
+ * 
+ * @param holderAddress The Metal holder address to check
+ * @param tokenAddress The token contract address (ADC token by default)
+ * @returns Token balance information including balance and USD value if available
+ */
+export async function getHolderTokenBalance(
+  holderAddress: string,
+  tokenAddress: string = ADC_TOKEN_ADDRESS
+): Promise<TokenBalanceResponse | null> {
+  try {
+    console.log("Getting token balance for holder:", holderAddress, "Token:", tokenAddress);
+    
+    if (!holderAddress) {
+      console.error("Missing holder address in getHolderTokenBalance");
+      toast("Balance Check Failed", { 
+        description: "Invalid holder address provided" 
+      }, "error");
+      return null;
+    }
+
+    if (!tokenAddress) {
+      console.error("Missing token address in getHolderTokenBalance");
+      toast("Balance Check Failed", { 
+        description: "Token address not specified" 
+      }, "error");
+      return null;
+    }
+    
+    // Call the Metal API endpoint
+    const response = await fetch(`/api/metal/tokenomics/balance`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ holderAddress, tokenAddress }),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      console.error("Failed to get token balance:", data.error, data.details);
+      return null;
+    }
+
+    console.log("Successfully retrieved token balance:", data);
+    return data;
+
+  } catch (error) {
+    console.error("Error getting token balance:", error);
+    toast("API Connection Error", { 
+      description: "Could not connect to the balance service." 
+    }, "error");
+    return null;
+  }
+}
+
+/**
+ * Gets token balance information for a user based on their wallet address.
+ * This function first fetches the user's Metal holder address and then gets the token balance.
+ * 
+ * @param walletAddress The user's blockchain wallet address
+ * @param tokenAddress The token contract address (ADC token by default)
+ * @returns Token balance information including balance and USD value if available
+ */
+export async function getUserTokenBalance(
+  walletAddress: string,
+  tokenAddress: string = ADC_TOKEN_ADDRESS
+): Promise<TokenBalanceResponse | null> {
+  try {
+    console.log("Getting token balance for wallet:", walletAddress);
+    
+    if (!walletAddress) {
+      console.error("Missing wallet address in getUserTokenBalance");
+      toast("Balance Check Failed", { 
+        description: "Invalid wallet address provided" 
+      }, "error");
+      return null;
+    }
+    
+    // First, get the user information to find their Metal holder address
+    const userResponse = await fetch(`/api/users/find?walletAddress=${encodeURIComponent(walletAddress)}`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      }
+    });
+
+    const userData = await userResponse.json();
+
+    if (!userResponse.ok || !userData?.holderAddress) {
+      console.error("Failed to find user's Metal holder address:", userData?.error);
+      return null;
+    }
+
+    // Now get the token balance using the holder address
+    return getHolderTokenBalance(userData.holderAddress, tokenAddress);
+
+  } catch (error) {
+    console.error("Error getting user token balance:", error);
+    toast("API Connection Error", { 
+      description: "Could not retrieve user balance information." 
+    }, "error");
+    return null;
+  }
+}
+
+/**
+ * Gets token balance information for a campaign based on campaign ID.
+ * This function fetches the campaign info to get its Metal holder address and then gets the token balance.
+ * 
+ * @param campaignId The unique identifier for the campaign
+ * @param tokenAddress The token contract address (ADC token by default)
+ * @returns Token balance information including balance and USD value if available
+ */
+export async function getCampaignTokenBalance(
+  campaignId: string,
+  tokenAddress: string = ADC_TOKEN_ADDRESS
+): Promise<TokenBalanceResponse | null> {
+  try {
+    console.log("Getting token balance for campaign:", campaignId);
+    
+    if (!campaignId) {
+      console.error("Missing campaign ID in getCampaignTokenBalance");
+      toast("Balance Check Failed", { 
+        description: "Invalid campaign ID provided" 
+      }, "error");
+      return null;
+    }
+    
+    // First, get campaign information to find its Metal holder address
+    const campaignResponse = await fetch(`/api/campaigns/${campaignId}`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      }
+    });
+
+    const campaignData = await campaignResponse.json();
+
+    if (!campaignResponse.ok || !campaignData?.holderAddress) {
+      console.error("Failed to find campaign's Metal holder address:", campaignData?.error || "No holder address found");
+      return null;
+    }
+
+    // Now get the token balance using the holder address
+    return getHolderTokenBalance(campaignData.holderAddress, tokenAddress);
+
+  } catch (error) {
+    console.error("Error getting campaign token balance:", error);
+    toast("API Connection Error", { 
+      description: "Could not retrieve campaign balance information." 
+    }, "error");
+    return null;
+  }
+}
+
+/**
+ * Interface for user balance information including personal and campaign balances
+ */
+interface UserAllBalances {
+  personalBalance: TokenBalanceResponse | null;
+  campaignBalances: {
+    campaignId: string;
+    balance: TokenBalanceResponse | null;
+  }[];
+}
+
+/**
+ * Gets all token balances for a user including their personal balance and all campaign balances.
+ * 
+ * @param walletAddress The user's blockchain wallet address
+ * @param tokenAddress The token contract address (ADC token by default)
+ * @returns Combined balance information for the user and their campaigns
+ */
+export async function getUserAllBalances(
+  walletAddress: string,
+  tokenAddress: string = ADC_TOKEN_ADDRESS
+): Promise<UserAllBalances> {
+  try {
+    console.log("Getting all balances for wallet:", walletAddress);
+    
+    const result: UserAllBalances = {
+      personalBalance: null,
+      campaignBalances: []
+    };
+    
+    // Get the user's personal balance
+    result.personalBalance = await getUserTokenBalance(walletAddress, tokenAddress);
+    
+    // Get user's campaigns
+    const campaignsResponse = await fetch(`/api/campaigns?walletAddress=${encodeURIComponent(walletAddress)}`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      }
+    });
+
+    const campaignsData = await campaignsResponse.json();
+
+    if (campaignsResponse.ok && campaignsData.campaigns && Array.isArray(campaignsData.campaigns)) {
+      // Get balance for each campaign
+      for (const campaign of campaignsData.campaigns) {
+        const campaignBalance = await getCampaignTokenBalance(campaign.id, tokenAddress);
+        result.campaignBalances.push({
+          campaignId: campaign.id,
+          balance: campaignBalance
+        });
+      }
+    }
+
+    return result;
+
+  } catch (error) {
+    console.error("Error getting all user balances:", error);
+    toast("API Connection Error", { 
+      description: "Could not retrieve complete balance information." 
+    }, "error");
+    return {
+      personalBalance: null,
+      campaignBalances: []
+    };
   }
 } 

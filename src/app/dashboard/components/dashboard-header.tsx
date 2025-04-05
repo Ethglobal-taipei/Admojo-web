@@ -1,11 +1,36 @@
 "use client"
 
+import { useState, useEffect } from "react"
 import { useUserStore } from "@/lib/store"
 import { Button } from "@/components/ui/button"
 import { Wallet } from "lucide-react"
+import { getUserTokenBalance } from "@/lib/services/tokenomics.service"
 
 export default function DashboardHeader() {
-  const { user, stats, balances, isConnected } = useUserStore()
+  const { user, isConnected } = useUserStore()
+  const [adcBalance, setAdcBalance] = useState<number | null>(null)
+  const [isLoadingBalance, setIsLoadingBalance] = useState(false)
+
+  // Fetch ADC balance from Metal API
+  useEffect(() => {
+    async function fetchADCBalance() {
+      if (isConnected && user?.walletAddress) {
+        setIsLoadingBalance(true)
+        try {
+          const tokenBalance = await getUserTokenBalance(user.walletAddress)
+          if (tokenBalance) {
+            setAdcBalance(tokenBalance.balance)
+          }
+        } catch (error) {
+          console.error("Error fetching token balance:", error)
+        } finally {
+          setIsLoadingBalance(false)
+        }
+      }
+    }
+
+    fetchADCBalance()
+  }, [isConnected, user?.walletAddress])
 
   // If not connected, show connect prompt
   if (!isConnected || !user) {
@@ -55,9 +80,14 @@ export default function DashboardHeader() {
         {/* Wallet Balance */}
         <div className="flex flex-col justify-center">
           <div className="text-sm font-medium mb-1">Wallet Balance</div>
-          <div className="flex items-baseline gap-4">
-            <div className="text-2xl font-black">${balances ? balances.USDC.toLocaleString() : "0.00"}</div>
-            <div className="text-lg font-bold text-gray-500">{balances ? balances.ADC.toLocaleString() : "0"} ADC</div>
+          <div className="flex items-baseline">
+            <div className="text-2xl font-black">
+              {isLoadingBalance ? (
+                "Loading..."
+              ) : (
+                `${adcBalance !== null ? adcBalance.toLocaleString() : "0"} ADC`
+              )}
+            </div>
           </div>
         </div>
 

@@ -1,5 +1,8 @@
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { getUserTokenBalance } from "@/lib/services/tokenomics.service"
+import { useUserStore } from "@/lib/store"
 
 interface BalanceCardProps {
   balances?: {
@@ -9,6 +12,31 @@ interface BalanceCardProps {
 }
 
 export default function BalanceCard({ balances }: BalanceCardProps) {
+  const { user } = useUserStore()
+  const [adcBalance, setAdcBalance] = useState<number | null>(null)
+  const [isLoadingBalance, setIsLoadingBalance] = useState(false)
+
+  // Fetch ADC balance from Metal API
+  useEffect(() => {
+    async function fetchADCBalance() {
+      if (user?.walletAddress) {
+        setIsLoadingBalance(true)
+        try {
+          const tokenBalance = await getUserTokenBalance(user.walletAddress)
+          if (tokenBalance) {
+            setAdcBalance(tokenBalance.balance)
+          }
+        } catch (error) {
+          console.error("Error fetching token balance:", error)
+        } finally {
+          setIsLoadingBalance(false)
+        }
+      }
+    }
+
+    fetchADCBalance()
+  }, [user?.walletAddress])
+
   return (
     <Card className="border-[6px] border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] hover:shadow-[12px_12px_0px_0px_rgba(0,0,0,1)] transition-all duration-300 relative">
       <CardHeader className="pb-4">
@@ -30,7 +58,13 @@ export default function BalanceCard({ balances }: BalanceCardProps) {
               <span className="font-bold text-lg">ADC Balance</span>
               <span className="font-bold text-lg">ADC</span>
             </div>
-            <div className="text-3xl font-black">{balances ? balances.ADC.toLocaleString() : "0"}</div>
+            <div className="text-3xl font-black">
+              {isLoadingBalance ? (
+                "Loading..."
+              ) : (
+                adcBalance !== null ? adcBalance.toLocaleString() : "0"
+              )}
+            </div>
           </div>
 
           <div className="flex items-center justify-between border-[4px] border-black p-3 bg-[#f5f5f5] hover:bg-[#e5e5e5] transition-colors">

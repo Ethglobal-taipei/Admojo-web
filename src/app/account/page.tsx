@@ -13,6 +13,7 @@ import { Label } from "@/components/ui/label"
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert"
 import { Switch } from "@/components/ui/switch"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import { getUserTokenBalance } from "@/lib/services/tokenomics.service"
 
 // Define profile form types
 interface ProfileFormData {
@@ -174,6 +175,31 @@ export default function AccountPage() {
     setFilter(filterType, value)
   }
 
+  // Add state for ADC balance from Metal API
+  const [adcBalance, setAdcBalance] = useState<number | null>(null)
+  const [isLoadingAdcBalance, setIsLoadingAdcBalance] = useState(false)
+
+  // Add effect to fetch ADC balance from Metal API
+  useEffect(() => {
+    async function fetchADCBalance() {
+      if (user?.walletAddress) {
+        setIsLoadingAdcBalance(true)
+        try {
+          const tokenBalance = await getUserTokenBalance(user.walletAddress)
+          if (tokenBalance) {
+            setAdcBalance(tokenBalance.balance)
+          }
+        } catch (error) {
+          console.error("Error fetching token balance:", error)
+        } finally {
+          setIsLoadingAdcBalance(false)
+        }
+      }
+    }
+
+    fetchADCBalance()
+  }, [user?.walletAddress])
+
   return (
     <div className="container mx-auto px-4 py-8 relative">
       <div className="absolute inset-0 -z-10 bg-checkered-light opacity-30"></div>
@@ -264,7 +290,6 @@ export default function AccountPage() {
                   <span className="font-bold text-lg">USDC Balance</span>
                   <span className="font-bold text-lg">USDC</span>
                 </div>
-                <div className="text-3xl font-black">{balances ? balances.USDC.toLocaleString() : "0"}</div>
               </div>
 
               <div className="border-[4px] border-black p-4 bg-white hover:translate-y-[-2px] hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all">
@@ -272,7 +297,13 @@ export default function AccountPage() {
                   <span className="font-bold text-lg">ADC Balance</span>
                   <span className="font-bold text-lg">ADC</span>
                 </div>
-                <div className="text-3xl font-black">{balances ? balances.ADC.toLocaleString() : "0"}</div>
+                <div className="text-3xl font-black">
+                  {isLoadingAdcBalance ? (
+                    "Loading..."
+                  ) : (
+                    adcBalance !== null ? adcBalance.toLocaleString() : "0"
+                  )}
+                </div>
               </div>
 
               <div className="flex items-center justify-between border-[4px] border-black p-3 bg-[#f5f5f5] hover:bg-[#e5e5e5] transition-colors">

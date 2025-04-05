@@ -1,14 +1,14 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
-export async function POST(req: Request, { params }: { params: { id: string } }) {
+export async function POST(req: Request, { params }: { params: { address: string } }) {
   try {
-    const userId = params.id;
+    const userAddress = params.address;
     const { holderAddress } = await req.json();
     
-    if (!userId) {
+    if (!userAddress) {
       return NextResponse.json(
-        { error: "Missing required parameter: userId" },
+        { error: "Missing required parameter: userAddress" },
         { status: 400 }
       );
     }
@@ -20,9 +20,9 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       );
     }
     
-    // Check if user exists
+    // Check if user exists by wallet address
     const existingUser = await prisma.user.findUnique({
-      where: { id: userId }
+      where: { walletAddress: userAddress }
     });
     
     if (!existingUser) {
@@ -34,7 +34,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     
     // Update user with holder address
     const updatedUser = await prisma.user.update({
-      where: { id: userId },
+      where: { walletAddress: userAddress },
       data: { holderAddress }
     });
     

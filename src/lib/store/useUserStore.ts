@@ -1,6 +1,7 @@
 import { create } from "zustand"
 import { persist } from "zustand/middleware"
 import * as userService from '../api/userService'
+import { getUserTokenBalance } from '@/lib/services/tokenomics.service'
 
 // Optional: Add types for Privy wallet info
 interface PrivyWalletInfo {
@@ -234,48 +235,36 @@ export const useUserStore = create<UserState>()(
         try {
           set({ isLoading: true, error: null })
           
-          // Try to fetch balances
-          let response;
-          try {
-            response = await userService.fetchUserBalances(address);
-          } catch (error) {
-            console.warn("Error fetching balances from API, using fallback data:", error);
-            // Use fallback data in case of API error
-            set({
-              balances: {
-                ADC: 12450.0,
-              },
-              isLoading: false,
-            });
-            return;
-          }
+          // Use Metal API to fetch ADC token balance
+          const tokenBalance = await getUserTokenBalance(address)
           
-          if (response.success && response.data) {
-            set({
-              balances: response.data,
-              isLoading: false,
-            });
-          } else {
-            // Fallback mock data
-            console.log("Using fallback balance data");
+          if (tokenBalance) {
             set({
               balances: {
-                ADC: 12450.0,
+                ADC: tokenBalance.balance,
               },
               isLoading: false,
-            });
+            })
+          } else {
+            // Fallback data in case API call fails
+            console.log("Unable to fetch ADC balance from Metal API, using fallback data")
+            set({
+              balances: {
+                ADC: 0,
+              },
+              isLoading: false,
+            })
           }
         } catch (error) {
-          // This should now only catch errors not related to the API call itself
-          console.error("Unexpected error in fetchBalances:", error);
+          console.error("Error fetching balances:", error)
           set({ 
             isLoading: false, 
             error: error instanceof Error ? error.message : "Error fetching balances",
             // Set fallback data even in case of error
             balances: {
-              ADC: 12450.0,
+              ADC: 0,
             }
-          });
+          })
         }
       },
 
