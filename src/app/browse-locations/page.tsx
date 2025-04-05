@@ -9,7 +9,7 @@ import { useCampaignStore, useLocationStore } from "@/lib/store"
 import { useBlockchainService } from "@/hooks/use-blockchain-service"
 import { useBoothRegistry } from "@/hooks/use-booth-registry"
 import { toast } from "@/lib/toast"
-import { Location, getCoordinates, getLocationName } from "@/lib/store/useLocationStore"
+import { Location, getCoordinates, getLocationName, getStatusString } from "@/lib/store/useLocationStore"
 
 export default function BrowseLocations() {
   const router = useRouter()
@@ -281,7 +281,15 @@ export default function BrowseLocations() {
         
         // Process in batches
         const totalBooths = filteredBooths.length;
-        const batchSize = 5;
+        const processBatchSize = 10; // Process more booths at once
+        const processBatchDelay = 5; // Use a smaller delay between batches
+        const locationStatusCounts = {
+          available: 0,
+          booked: 0,
+          maintenance: 0,
+          active: 0,
+          inactive: 0
+        };
         
         // If there are no booths, show empty state immediately
         if (totalBooths === 0) {
@@ -308,6 +316,9 @@ export default function BrowseLocations() {
             processingRef.current = false;
             setLoadingProgress(100);
             
+            // Log status counts
+            console.log('Location status counts:', locationStatusCounts);
+            
             // Save completed data to cache
             if (locationsRef.current.length > 0) {
               saveToCache(locationsRef.current);
@@ -315,11 +326,19 @@ export default function BrowseLocations() {
             return;
           }
           
-          const endIndex = Math.min(startIndex + batchSize, totalBooths);
+          const endIndex = Math.min(startIndex + processBatchSize, totalBooths);
           const batch = filteredBooths.slice(startIndex, endIndex);
           
           // Create new locations
           const newLocations = batch.map(booth => {
+            // Track status counts
+            if (booth.status === 0) locationStatusCounts.available++;
+            else if (booth.status === 1) locationStatusCounts.booked++;
+            else if (booth.status === 2) locationStatusCounts.maintenance++;
+            
+            if (booth.active) locationStatusCounts.active++;
+            else locationStatusCounts.inactive++;
+            
             const impressions = Math.floor(Math.random() * 10000) + 1000;
             
             return {
@@ -339,7 +358,7 @@ export default function BrowseLocations() {
           // Update our ref without triggering a render
           locationsRef.current = [...locationsRef.current, ...newLocations];
           
-          // Update progress
+          // Update progress with smoother transitions
           const progress = Math.min(Math.round((endIndex / totalBooths) * 100), 100);
           setLoadingProgress(progress);
           
@@ -350,14 +369,15 @@ export default function BrowseLocations() {
             
             // Only update the store when we have a significant amount or are done
             if (endIndex === totalBooths || endIndex % 50 === 0) {
+              // Update the location store with processed data
               locationStore.setLocations([...locationsRef.current]);
             }
           }
           
-          // Schedule next batch with delay
+          // Schedule next batch with shorter delay for smoother experience
           processingTimeoutRef.current = setTimeout(() => {
             processNextBatch(endIndex);
-          }, 10);
+          }, processBatchDelay);
         };
         
         // Start processing from the beginning
@@ -489,44 +509,75 @@ export default function BrowseLocations() {
 
   // Retry fetching data
   const handleRetry = () => {
-    // Reset all state before retrying
-    setHasAttemptedRefresh(true);
-    setIsLoading(true);
-    setLoadingProgress(0);
+    // Reset state
     setError(null);
     setRenderError(null);
+    setIsLoading(true);
+    setHasAttemptedRefresh(true);
     
-    // Clear refs
+    // Reset refs
     resetState();
     fetchedRef.current = false;
     
-    // Start fresh with forced refresh
+    // Force a fresh fetch
     fetchAndProcessData(true);
     
-    toast("Retrying", { description: "Refreshing location data..." }, "info");
+    toast("Retrying", { description: "Reloading location data..." }, "info");
   };
 
   // Filter locations based on search and filter criteria
-  const filteredLocations = mounted
-    ? locations.filter((location) => {
+  const filteredLocations = locations && locations.length > 0
+    ? locations.filter(location => {
         try {
-          if (!location) return false
+          const searchTermLower = searchTerm.toLowerCase()
           
-          const name = getLocationName(location)
-          const city = location.city || ""
-          const displayType = location.displayType || ""
+          // Search matching
+          const matchesSearch = 
+            searchTerm === "" || 
+            (location.metadata?.location || "").toLowerCase().includes(searchTermLower) ||
+            (location.metadata?.displaySize || "").toLowerCase().includes(searchTermLower) ||
+            (location.city || "").toLowerCase().includes(searchTermLower) ||
+            (location.name || "").toLowerCase().includes(searchTermLower) ||
+            (location.deviceId?.toString() || "").includes(searchTermLower)
           
-          const matchesSearch =
-            name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            city.toLowerCase().includes(searchTerm.toLowerCase())
-
-          if (selectedFilter === "all") return matchesSearch
-          if (selectedFilter === "indoor") return matchesSearch && displayType.toLowerCase().includes("indoor")
-          if (selectedFilter === "outdoor") return matchesSearch && displayType.toLowerCase().includes("outdoor")
-          if (selectedFilter === "digital") return matchesSearch && displayType.toLowerCase().includes("digital")
-          if (selectedFilter === "static") return matchesSearch && displayType.toLowerCase().includes("static")
-
-          return matchesSearch
+          // Filter matching - improve filter functionality
+          let matchesFilter = true
+          if (selectedFilter !== "all") {
+            switch(selectedFilter) {
+              case "indoor":
+                matchesFilter = (location.metadata?.location || "").toLowerCase().includes("indoor") ||
+                               (location.metadata?.additionalInfo || "").toLowerCase().includes("indoor")
+                break
+              case "outdoor":
+                matchesFilter = (location.metadata?.location || "").toLowerCase().includes("outdoor") ||
+                               (location.metadata?.additionalInfo || "").toLowerCase().includes("outdoor")
+                break
+              case "digital":
+                matchesFilter = (location.displayType || "").toLowerCase().includes("digital") ||
+                               (location.metadata?.displaySize || "").toLowerCase().includes("digital")
+                break
+              case "static":
+                matchesFilter = (location.displayType || "").toLowerCase().includes("static") ||
+                               (location.metadata?.displaySize || "").toLowerCase().includes("static")
+                break
+              case "available":
+                matchesFilter = location.status === 0 // Unbooked status
+                break
+              case "booked":
+                matchesFilter = location.status === 1 // Booked status
+                break
+            }
+          }
+          
+          // Campaign selection filtering - only show locations that can be selected
+          if (isSelectingLocations && draftCampaign) {
+            // Don't show already booked locations for campaign selection
+            if (location.status === 1) { // Booked status
+              return false
+            }
+          }
+          
+          return matchesSearch && matchesFilter
         } catch (err) {
           console.error("Error filtering location:", err)
           return false
@@ -539,6 +590,29 @@ export default function BrowseLocations() {
     try {
       const name = getLocationName(location)
       const id = location.deviceId
+      const statusText = getStatusString(location.status)
+      
+      // Determine status style based on status
+      let statusStyle = ""
+      let statusTextColor = ""
+      
+      switch(location.status) {
+        case 0: // Unbooked
+          statusStyle = "bg-green-100"
+          statusTextColor = "text-green-800"
+          break
+        case 1: // Booked
+          statusStyle = "bg-blue-100" 
+          statusTextColor = "text-blue-800"
+          break
+        case 2: // Under Maintenance
+          statusStyle = "bg-yellow-100"
+          statusTextColor = "text-yellow-800"
+          break
+        default:
+          statusStyle = "bg-gray-100"
+          statusTextColor = "text-gray-800"
+      }
       
       return (
         <div
@@ -566,12 +640,26 @@ export default function BrowseLocations() {
             {location.city || "Unknown location"}
           </p>
           
+          {location.metadata?.additionalInfo && (
+            <p className="text-xs text-gray-500 mb-2 italic">
+              {location.metadata.additionalInfo}
+            </p>
+          )}
+          
+          <div className="flex justify-between mb-2">
+            <span className="text-xs font-semibold">ID: {location.deviceId}</span>
+            <span className="text-xs font-semibold">{statusText}</span>
+          </div>
+          
           <div className="flex flex-wrap gap-2 mb-3">
             <span className="px-2 py-1 text-xs bg-gray-100 rounded-full">
               {location.displayType || "Display"}
             </span>
             <span className="px-2 py-1 text-xs bg-gray-100 rounded-full">
               {location.displaySize || "Medium"}
+            </span>
+            <span className={`px-2 py-1 text-xs rounded-full ${statusStyle} ${statusTextColor}`}>
+              {statusText}
             </span>
             <span className={`px-2 py-1 text-xs rounded-full ${location.active ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"}`}>
               {location.active ? "Active" : "Inactive"}
@@ -598,12 +686,17 @@ export default function BrowseLocations() {
                 e.stopPropagation()
                 handleLocationToggle(location)
               }}
-              disabled={isAddingLocation || isBooking}
+              disabled={isAddingLocation || isBooking || location.status === 1} // Disable if location is already booked
             >
               {isLocationSelected(id) ? (
                 <>
                   <Check className="mr-2 h-4 w-4" />
                   Selected
+                </>
+              ) : location.status === 1 ? (
+                <>
+                  <MapPin className="mr-2 h-4 w-4" />
+                  Already Booked
                 </>
               ) : (
                 <>
@@ -712,10 +805,16 @@ export default function BrowseLocations() {
             </p>
             
             {locations.length > 0 && (
-              <div className="mt-4 text-center">
-                <p className="inline-block bg-[#0055FF] text-white px-3 py-1 rounded-full text-sm border-2 border-black">
-                  {locations.length} locations found so far
-                </p>
+              <div className="mt-4 flex flex-wrap justify-center gap-2">
+                <div className="inline-block bg-green-100 text-green-800 px-3 py-1 rounded-full text-xs border-2 border-green-500">
+                  {locations.filter(l => l.status === 0).length} Available
+                </div>
+                <div className="inline-block bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-xs border-2 border-blue-500">
+                  {locations.filter(l => l.status === 1).length} Booked
+                </div>
+                <div className="inline-block bg-yellow-100 text-yellow-800 px-3 py-1 rounded-full text-xs border-2 border-yellow-500">
+                  {locations.filter(l => l.status === 2).length} In Maintenance
+                </div>
               </div>
             )}
           </div>
@@ -865,6 +964,43 @@ export default function BrowseLocations() {
     }
   }, []);
 
+  // Add a Stats Summary component at the top of the page
+  const LocationStatsSummary = () => {
+    const availableCount = locations.filter(l => l.status === 0).length;
+    const bookedCount = locations.filter(l => l.status === 1).length;
+    const maintenanceCount = locations.filter(l => l.status === 2).length;
+    const activeCount = locations.filter(l => l.active).length;
+    const inactiveCount = locations.filter(l => !l.active).length;
+    
+    return (
+      <div className="bg-white border-[3px] border-black p-4 mb-8 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+        <h3 className="font-bold mb-3">Location Stats</h3>
+        <div className="grid grid-cols-5 gap-2 text-center">
+          <div className="p-2 border-[2px] border-green-400 rounded-lg bg-green-50">
+            <div className="text-xl font-bold">{availableCount}</div>
+            <div className="text-xs font-medium text-green-800">Available</div>
+          </div>
+          <div className="p-2 border-[2px] border-blue-400 rounded-lg bg-blue-50">
+            <div className="text-xl font-bold">{bookedCount}</div>
+            <div className="text-xs font-medium text-blue-800">Booked</div>
+          </div>
+          <div className="p-2 border-[2px] border-yellow-400 rounded-lg bg-yellow-50">
+            <div className="text-xl font-bold">{maintenanceCount}</div>
+            <div className="text-xs font-medium text-yellow-800">Maintenance</div>
+          </div>
+          <div className="p-2 border-[2px] border-green-400 rounded-lg bg-green-50">
+            <div className="text-xl font-bold">{activeCount}</div>
+            <div className="text-xs font-medium text-green-800">Active</div>
+          </div>
+          <div className="p-2 border-[2px] border-red-400 rounded-lg bg-red-50">
+            <div className="text-xl font-bold">{inactiveCount}</div>
+            <div className="text-xs font-medium text-red-800">Inactive</div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   // Prevent hydration mismatch by not rendering location data on server
   if (!mounted) {
     return (
@@ -907,7 +1043,7 @@ export default function BrowseLocations() {
           </div>
 
           <div className="flex gap-2 overflow-x-auto pb-2">
-            {["all", "indoor", "outdoor", "digital", "static"].map((filter) => (
+            {["all", "indoor", "outdoor", "digital", "static", "available", "booked"].map((filter) => (
               <Button
                 key={filter}
                 variant={selectedFilter === filter ? "default" : "outline"}
@@ -922,6 +1058,11 @@ export default function BrowseLocations() {
             ))}
           </div>
         </div>
+
+        {/* Location Stats Summary - only shown when locations are loaded and not in selection mode */}
+        {!isLoading && !error && !renderError && locations.length > 0 && !isSelectingLocations && (
+          <LocationStatsSummary />
+        )}
 
         {error || renderError ? (
           <ErrorDisplay />

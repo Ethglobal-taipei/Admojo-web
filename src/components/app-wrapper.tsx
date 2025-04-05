@@ -18,7 +18,7 @@ export default function AppWrapper({ children }: AppWrapperProps) {
       hasAttemptedHolderCreation.current = true; // Mark as attempted
       
       console.log("User authenticated, attempting to create Metal holder...");
-      createMetalHolder(user.wallet.address) // Use wallet address as userId
+      createMetalHolder(user.wallet.address, user.wallet.address) // Pass wallet address as both userId and walletAddress
         .then(success => {
           if (success) {
             console.log("Metal holder creation process completed for", user.wallet?.address);

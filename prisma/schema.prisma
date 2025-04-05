@@ -1,0 +1,236 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// User model to track both advertisers and providers
+model User {
+  id            String   @id @default(cuid())
+  name          String
+  username      String   @unique
+  email         String?  @unique
+  avatar        String?
+  role          String   @default("Advertiser")
+  memberSince   DateTime @default(now())
+  tier          String   @default("Standard")
+  walletAddress String   @unique
+  holderAddress String?  @unique
+  walletType    String?
+  linkedWallets Json?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relations
+  balances     Balance?
+  transactions Transaction[]
+  settings     UserSettings?
+  stats        UserStats?
+  provider     Provider?
+  campaigns    Campaign[]
+}
+
+model Balance {
+  id      String @id @default(cuid())
+  USDC    Float  @default(0)
+  ADC     Float  @default(0)
+  user    User   @relation(fields: [userId], references: [id])
+  userId  String @unique
+}
+
+model Transaction {
+  id        Int      @id @default(autoincrement())
+  type      String
+  amount    Float
+  token     String
+  status    String
+  timestamp DateTime @default(now())
+  txHash    String?
+  user      User     @relation(fields: [userId], references: [id])
+  userId    String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model UserSettings {
+  id                   String  @id @default(cuid())
+  notificationSettings Json    @default("{\"emailNotifications\":true,\"pushNotifications\":true,\"marketingEmails\":false,\"transactionAlerts\":true,\"campaignUpdates\":true}")
+  privacySettings      Json    @default("{\"showProfile\":true,\"showActivity\":true,\"allowDataCollection\":true,\"showWalletBalance\":false}")
+  user                 User    @relation(fields: [userId], references: [id])
+  userId               String  @unique
+}
+
+model UserStats {
+  id               String @id @default(cuid())
+  campaignsCreated Int    @default(0)
+  activeDisplays   Int    @default(0)
+  totalSpent       Float  @default(0)
+  avgCPI           Float  @default(0)
+  user             User   @relation(fields: [userId], references: [id])
+  userId           String @unique
+}
+
+enum UserRole {
+  USER
+  ADVERTISER
+  PROVIDER
+  ADMIN
+}
+
+// Provider model for ad display service providers
+model Provider {
+  id              String         @id @default(uuid())
+  userId          String         @unique
+  user            User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  isActive        Boolean        @default(true)
+  walletAddress   String         @unique // Blockchain address for this provider
+  holderAddress   String         @unique
+  stakedAmount    Float          @default(0)
+  stakingDate     DateTime?
+  locations       Location[]
+  metadata        Json?          // Additional provider details
+  earningsTotal   Float          @default(0)
+  earningsPerDay  Json?          // Track daily earnings
+  
+  @@index([walletAddress])
+}
+
+// Location model for display locations - aligns with BoothMetadata in smart contract
+model Location {
+  id                String         @id @default(uuid())
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+  name              String
+  deviceId          Int            @unique // Numeric blockchain device ID
+  providerId        String
+  provider          Provider       @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  isActive          Boolean        @default(true)
+  status            BoothStatus    @default(Unbooked)
+  
+  // Core properties from BoothMetadata
+  location          String         // Physical location (as in BoothMetadata)
+  displaySize       String         // Size of the display (as in BoothMetadata)
+  additionalInfo    String?        // Additional information (as in BoothMetadata)
+  
+  // Extended properties for UI
+  city              String?
+  area              String?
+  coordinates       Json?          // { lat: number, lng: number }
+  type              String?        // Type of location (mall, transit, etc.)
+  dailyTraffic      Int?           // Estimated daily traffic
+  displayType       String?        // Type of display
+  pricePerDay       Float          @default(0)
+  images            String[]       // URLs to location images
+  bookings          CampaignLocationBooking[]
+  metrics           CampaignLocationMetric[]
+  metadataJson      Json?          // Additional location metadata
+
+  @@index([deviceId])
+}
+
+enum BoothStatus {
+  Unbooked
+  Booked
+  UnderMaintenance
+}
+
+// Campaign model for ad campaigns - aligned with smart contract
+model Campaign {
+  id                String         @id @default(uuid())
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+  name              String
+  description       String?        @db.Text
+  advertiserId      String
+  advertiser        User           @relation(fields: [advertiserId], references: [id], onDelete: Restrict)
+  startDate         DateTime
+  endDate           DateTime
+  totalBudget       Float          @default(0)
+  remainingBudget   Float          @default(0)
+  isActive          Boolean        @default(false)
+  contentURI        String?        // IPFS URI for ad content
+  creativeUrl       String?        // URL to creative image/video
+  status            CampaignStatus @default(DRAFT)
+  transactionHash   String?        // Blockchain transaction hash
+  onChainId         Int?           // On-chain campaign ID (numeric)
+  locationIds       Int[]          @default([]) // Array of device IDs this campaign is shown on
+  views             Int            @default(0)  // Total views across all locations
+  taps              Int            @default(0)  // Total taps/clicks across all locations
+  hourlyRate        Float          @default(0)  // Hourly rate in ADC tokens
+  bookings          CampaignLocationBooking[]
+  metrics           CampaignLocationMetric[]
+  metadataJson      Json?          // Additional campaign metadata
+
+  @@index([onChainId])
+  @@index([status])
+}
+
+enum CampaignStatus {
+  DRAFT
+  PENDING
+  ACTIVE
+  PAUSED
+  COMPLETED
+  CANCELLED
+}
+
+// CampaignLocationBooking model for tracking bookings
+model CampaignLocationBooking {
+  id                String         @id @default(uuid())
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+  campaignId        String
+  campaign          Campaign       @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  locationId        String
+  location          Location       @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  totalAmount       Float          @default(0)
+  dailyRate         Float          @default(0)
+  releasedAmount    Float          @default(0)
+  isConfirmed       Boolean        @default(false)
+  
+  @@unique([campaignId, locationId])
+}
+
+// CampaignLocationMetric model for tracking metrics from PerformanceOracle
+model CampaignLocationMetric {
+  id                String         @id @default(uuid())
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+  campaignId        String
+  campaign          Campaign       @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  locationId        String
+  location          Location       @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  date              DateTime       @default(now())
+  views             Int            @default(0)  // From PerformanceOracle contract
+  interactions      Int            @default(0)  // Taps from PerformanceOracle contract
+  
+  @@unique([campaignId, locationId, date])
+}
+
+// Analytics model for tracking overall system stats
+model Analytics {
+  id                String         @id @default(uuid())
+  date              DateTime       @default(now()) @unique
+  totalCampaigns    Int            @default(0)
+  activeCampaigns   Int            @default(0)
+  totalLocations    Int            @default(0)
+  activeLocations   Int            @default(0)
+  totalProviders    Int            @default(0)
+  activeProviders   Int            @default(0)
+  totalAdvertisers  Int            @default(0)
+  dailyImpressions  Int            @default(0)
+  dailyClicks       Int            @default(0)
+  dailyConversions  Int            @default(0)
+  dailyRevenue      Float          @default(0)
+}

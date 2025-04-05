@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Search, Filter, ArrowLeft, CheckSquare, MapPin } from "lucide-react"
+import { Search, Filter, ArrowLeft, CheckSquare, MapPin, Loader2 } from "lucide-react"
 import { useLocationStore } from "@/lib/store/useLocationStore"
 import { useCampaignStore } from "@/lib/store/useCampaignStore"
 import { toast } from "@/lib/toast"
@@ -13,6 +13,8 @@ import { useAdContract } from "@/hooks/use-ad-contract"
 import { Location } from "@/lib/store/useLocationStore"
 import { useBoothRegistry } from "@/hooks/use-booth-registry"
 import dynamic from "next/dynamic"
+import NProgress from 'nprogress'
+import 'nprogress/nprogress.css'
 
 // Dynamically import the map component with no SSR
 const CampaignLocationsMap = dynamic(
@@ -78,13 +80,26 @@ export default function BrowseLocations() {
   const [searchTerm, setSearchTerm] = useState("")
   const [filterType, setFilterType] = useState("all")
   const [isBooking, setIsBooking] = useState(false)
-  const [hasFetched, setHasFetched] = useState(false)
   const [viewMode, setViewMode] = useState<"map" | "list">("map")
   
-  // Helper function to cast LocationData to be compatible with Location type for campaign store
-  const asLocationCompatible = (location: LocationData): Location | LocationData => {
-    return location as unknown as Location;
-  }
+  // Configure NProgress
+  useEffect(() => {
+    NProgress.configure({ showSpinner: false });
+  }, []);
+
+  // Handle NProgress based on contractLoading state
+  useEffect(() => {
+    if (contractLoading) {
+      NProgress.start();
+    } else {
+      NProgress.done();
+    }
+
+    // Cleanup function to ensure NProgress stops if component unmounts
+    return () => {
+      NProgress.done();
+    };
+  }, [contractLoading]);
   
   // Handle redirecting if not selecting locations
   useEffect(() => {
@@ -92,28 +107,6 @@ export default function BrowseLocations() {
       router.push("/dashboard")
     }
   }, [isSelectingLocations, router])
-  
-  // Fetch locations when component mounts, wrapped in useCallback to prevent dependency changes
-  const fetchLocations = useCallback(async () => {
-    console.log("Fetching locations...");
-    if (!hasFetched && refresh) {
-      console.log("Executing refresh...");
-      try {
-        await refresh();
-        setHasFetched(true);
-        console.log("Locations fetched successfully");
-      } catch (error) {
-        console.error("Error fetching locations:", error);
-        toast("Error", { description: "Failed to load locations from blockchain." }, "error");
-        setHasFetched(true); // Mark as fetched to prevent infinite retries
-      }
-    }
-  }, [refresh, hasFetched]);
-  
-  // Only fetch on mount
-  useEffect(() => {
-    fetchLocations();
-  }, [fetchLocations]);
   
   // Check if a location is already selected
   const isLocationSelected = (locationId: string | number) => {
@@ -176,15 +169,19 @@ export default function BrowseLocations() {
     router.push("/dashboard")
   }
 
-  // This will be true during initial load but once we've attempted to fetch and switched to mock data,
-  // we won't keep showing a loading indicator indefinitely
-  const isLoading = (storeLoading || contractLoading) && !hasFetched;
+  // Use contractLoading directly for the main loading indicator
+  const isLoading = contractLoading;
   
   // Handle manual refresh of locations
   const handleRefresh = async () => {
-    setHasFetched(false);
-    await fetchLocations();
+    // NProgress will start automatically due to contractLoading changing
+    await refresh();
   };
+  
+  // Helper function to cast LocationData to be compatible with Location type for campaign store
+  const asLocationCompatible = (location: LocationData): Location | LocationData => {
+    return location as unknown as Location;
+  }
   
   return (
     <main className="min-h-screen bg-white">
@@ -205,9 +202,11 @@ export default function BrowseLocations() {
               variant="outline"
               className="border-[2px] border-black rounded-none"
               onClick={handleRefresh}
-              disabled={contractLoading}
+              disabled={isLoading}
             >
-              {contractLoading ? "Refreshing..." : "Refresh"}
+              {isLoading ? (
+                <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Refreshing...</>
+              ) : "Refresh"}
             </Button>
             
             {isSelectingLocations && (
@@ -289,79 +288,40 @@ export default function BrowseLocations() {
           </div>
         </div>
         
-        <div className="grid grid-cols-1 gap-4">
-          {/* Main content - either map or list */}
-          <div className="border-[4px] border-black bg-white p-4 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]">
-            {isLoading ? (
-              <div className="h-[600px] w-full flex items-center justify-center">
-                <div className="animate-spin h-10 w-10 border-4 border-[#0055FF] border-t-transparent rounded-full mr-3"></div>
-                <p className="font-bold">Loading Locations...</p>
-              </div>
-            ) : fetchedLocations.length === 0 ? (
-              <div className="h-[300px] flex flex-col items-center justify-center">
-                <div className="text-3xl font-bold mb-4">No Locations Available</div>
-                <p className="text-gray-500 mb-6">No location data could be found from the blockchain.</p>
-                <Button 
-                  onClick={handleRefresh}
-                  className="bg-[#0055FF] text-white border-[3px] border-black hover:bg-[#0044CC]"
-                >
-                  Retry Loading Locations
-                </Button>
-              </div>
+        {/* Loading State */}
+        {isLoading && (
+          <div className="flex justify-center items-center h-64">
+            <Loader2 className="h-8 w-8 animate-spin text-gray-500 mr-3" />
+            <span className="text-gray-600">Loading locations...</span>
+          </div>
+        )}
+
+        {/* Content Area: Map or List */}
+        {!isLoading && fetchedLocations.length > 0 && (
+          <div className="mt-6">
+            {viewMode === "map" ? (
+              <CampaignLocationsMap
+                passedLocations={filteredLocations}
+                editable={isSelectingLocations}
+              />
             ) : (
-              <div>
-                <h2 className="font-bold text-xl mb-4">
-                  Available Locations ({filteredLocations.length})
-                </h2>
-                
-                {viewMode === "map" ? (
-                  <div className="h-[600px] w-full">
-                    <CampaignLocationsMap
-                      height="600px"
-                      width="100%"
-                      editable={isSelectingLocations}
-                      showControls={true}
-                      showStats={true}
-                      showFilters={false}
-                      passedLocations={fetchedLocations}
-                    />
-                  </div>
-                ) : (
-                  <LocationsList 
-                    locations={filteredLocations}
-                    isLocationSelected={isLocationSelected}
-                    onLocationToggle={handleLocationToggle}
-                  />
-                )}
-              </div>
+              <LocationsList
+                locations={filteredLocations}
+                isLocationSelected={isLocationSelected}
+                onLocationToggle={handleLocationToggle}
+              />
             )}
           </div>
-          
-          {/* Selected locations summary */}
-          {isSelectingLocations && draftCampaign.targetLocations && draftCampaign.targetLocations.length > 0 && (
-            <div className="border-[4px] border-black bg-white p-4 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]">
-              <h2 className="font-bold text-lg mb-4">Selected Locations ({draftCampaign.targetLocations.length})</h2>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                {draftCampaign.targetLocations.map((loc: any) => (
-                  <div key={loc.id} className="border border-blue-500 bg-blue-50 p-3 rounded-md flex justify-between items-center">
-                    <div>
-                      <div className="font-semibold">{loc.name}</div>
-                      <div className="text-xs text-gray-600">{loc.city || 'Unknown'}</div>
-                    </div>
-                    <Button 
-                      size="sm" 
-                      variant="ghost"
-                      className="h-8 w-8 p-0 rounded-full hover:bg-blue-100"
-                      onClick={() => handleLocationToggle(loc as LocationData)}
-                    >
-                      <CheckSquare className="h-4 w-4" />
-                    </Button>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
+        )}
+
+        {/* No Locations Found State (after loading is complete) */}
+        {!isLoading && fetchedLocations.length === 0 && !locationError && (
+           <div className="text-center py-10">
+             <MapPin className="mx-auto h-12 w-12 text-gray-400" />
+             <h3 className="mt-2 text-sm font-semibold text-gray-900">No locations found</h3>
+             <p className="mt-1 text-sm text-gray-500">No active locations match your criteria.</p>
+           </div>
+        )}
       </div>
     </main>
   )

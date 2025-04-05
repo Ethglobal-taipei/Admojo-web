@@ -5,7 +5,7 @@ import type React from "react"
 import { useState } from "react"
 import { X, CreditCard, Wallet, ArrowRight, Check } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Dialog, DialogContent } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
@@ -23,11 +23,11 @@ export default function AddFundsModal() {
     e.preventDefault()
 
     if (!amount || Number.parseFloat(amount) <= 0) {
-      toast({
-        title: "Invalid Amount",
-        description: "Please enter a valid amount to deposit",
-        type: "error",
-      })
+      toast(
+        "Invalid Amount",
+        { description: "Please enter a valid amount to deposit" },
+        "error"
+      )
       return
     }
 
@@ -52,11 +52,11 @@ export default function AddFundsModal() {
       }, 3000)
     } catch (error) {
       setIsProcessing(false)
-      toast({
-        title: "Deposit Failed",
-        description: "There was an error processing your deposit",
-        type: "error",
-      })
+      toast(
+        "Deposit Failed",
+        { description: "There was an error processing your deposit" },
+        "error"
+      )
     }
   }
 
@@ -86,7 +86,9 @@ export default function AddFundsModal() {
               </Button>
             </div>
 
-            <h2 className="text-3xl font-black mb-2">Add Funds</h2>
+            <DialogTitle asChild>
+              <h2 className="text-3xl font-black mb-2">Add Funds</h2>
+            </DialogTitle>
             <p className="font-bold">Deposit USDC to your ADNET account</p>
           </div>
 

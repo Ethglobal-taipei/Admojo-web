@@ -1,9 +1,9 @@
 "use client"
 
 import { useRouter } from "next/navigation"
-import { Bell, Menu } from "lucide-react"
+import { Bell, Menu, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { useEffect, useRef } from "react"
+import { useEffect, useRef, useState } from "react"
 import ProviderHeader from "@/components/provider-header"
 import DisplayOverview from "@/components/display-overview"
 import DisplayRegistration from "@/components/display-registration"
@@ -16,10 +16,36 @@ import { useProviderPages } from "@/hooks/use-provider-hooks"
 export default function ProviderDashboard() {
   // Use the centralized provider hook
   const {
+    serviceLoading,
     serviceError,
     isCorrectChain,
-    switchChain
+    switchChain,
+    service,
+    isConnected
   } = useProviderPages();
+
+  const [initializing, setInitializing] = useState(true);
+
+  // Add effect to handle initialization state
+  useEffect(() => {
+    // Set initializing to false once service is loaded or if there's an error
+    if (!serviceLoading || serviceError) {
+      setTimeout(() => setInitializing(false), 500); // Short delay for smoother UX
+    }
+  }, [serviceLoading, serviceError]);
+
+  // Show loading state while initializing blockchain services
+  if (initializing) {
+    return (
+      <div className="min-h-screen bg-white flex items-center justify-center">
+        <div className="flex flex-col items-center space-y-4">
+          <Loader2 className="w-12 h-12 animate-spin text-[#0055FF]" />
+          <p className="text-xl font-bold">Loading provider dashboard...</p>
+          <p className="text-sm text-gray-500">Connecting to blockchain services</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-white relative">
@@ -53,11 +79,26 @@ export default function ProviderDashboard() {
       
       <main className="container mx-auto px-4 py-8 relative z-10">
         <ProviderHeader />
-        <DisplayOverview />
-        <DisplayRegistration />
-        <DisplayPerformance />
-        <VerificationManagement />
-        <EarningsPayments />
+        {isConnected && service ? (
+          <>
+            <DisplayOverview />
+            <DisplayRegistration />
+            <DisplayPerformance />
+            <VerificationManagement />
+            <EarningsPayments />
+          </>
+        ) : (
+          <div className="border-[6px] border-black bg-white p-6 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] my-8">
+            <h2 className="text-xl font-black mb-4">Connect Wallet</h2>
+            <p className="mb-4">You need to connect your wallet to view your provider dashboard.</p>
+            <Button 
+              className="bg-[#0055FF] hover:bg-[#003EBB] text-white font-bold"
+              onClick={() => window.location.reload()}
+            >
+              Retry Connection
+            </Button>
+          </div>
+        )}
         
         {/* Display blockchain connection status notification if there are errors */}
         {serviceError && (

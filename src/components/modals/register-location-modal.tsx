@@ -1,14 +1,49 @@
 "use client"
 
 import type React from "react"
-
-import { useState, useRef } from "react"
+import { useState, useRef, useEffect } from "react"
 import { MapPin, Upload, Camera, ChevronRight, ChevronLeft, Check, Info, Ruler, Users, Eye, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { useLocationStore } from "@/lib/store/useLocationStore"
 import { toast } from "@/lib/toast"
+import { useBoothRegistry } from "@/hooks"
+import { BoothMetadata } from "@/lib/blockchain"
+import dynamic from "next/dynamic"
+
+// Dynamically import the Map components with no SSR
+const MapContainer = dynamic(
+  () => import("react-leaflet").then((mod) => mod.MapContainer),
+  { ssr: false }
+)
+
+const TileLayer = dynamic(
+  () => import("react-leaflet").then((mod) => mod.TileLayer),
+  { ssr: false }
+)
+
+const Marker = dynamic(
+  () => import("react-leaflet").then((mod) => mod.Marker),
+  { ssr: false }
+)
+
+const Popup = dynamic(
+  () => import("react-leaflet").then((mod) => mod.Popup),
+  { ssr: false }
+)
+
+// Import Leaflet CSS in a client component
+const LeafletStyles = () => {
+  return (
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+      crossOrigin=""
+    />
+  )
+}
 
 interface RegisterLocationModalProps {
   isOpen: boolean
@@ -17,12 +52,18 @@ interface RegisterLocationModalProps {
 
 export default function RegisterLocationModal({ isOpen, onClose }: RegisterLocationModalProps) {
   const { createLocation } = useLocationStore()
+  const { registerBooth, isRegistering, isTransactionPending } = useBoothRegistry()
 
   const [currentStep, setCurrentStep] = useState(1)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const modalRef = useRef<HTMLDivElement>(null)
+  const [isMounted, setIsMounted] = useState(false)
+  const [leafletLoaded, setLeafletLoaded] = useState(false)
+  const [mapVisible, setMapVisible] = useState(false)
+  const [nextDeviceId, setNextDeviceId] = useState<number>(Math.floor(Math.random() * 1000) + 1000)
 
   const [formData, setFormData] = useState({
+    deviceId: nextDeviceId.toString(),
     name: "",
     type: "billboard",
     address: "",
@@ -65,6 +106,56 @@ export default function RegisterLocationModal({ isOpen, onClose }: RegisterLocat
     availableSlots: 10,
   })
 
+  // Load Leaflet on client-side
+  useEffect(() => {
+    setIsMounted(true)
+    
+    if (typeof window !== "undefined") {
+      // Add Leaflet script if not already added
+      const script = document.createElement('script');
+      script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+      script.integrity = 'sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=';
+      script.crossOrigin = '';
+      script.onload = () => {
+        setLeafletLoaded(true);
+        setMapVisible(true);
+      };
+      
+      document.head.appendChild(script);
+    }
+  }, []);
+
+  // Create custom marker icon
+  const createMarkerIcon = () => {
+    if (typeof window === "undefined" || !window.L) {
+      return undefined;
+    }
+    
+    try {
+      return window.L.icon({
+        iconUrl: "/marker-active.svg",
+        iconSize: [30, 30],
+        iconAnchor: [15, 15],
+        popupAnchor: [0, -15]
+      });
+    } catch (error) {
+      console.error("Error creating map icon:", error);
+      return undefined;
+    }
+  };
+
+  // Update marker position on map click
+  const handleMapClick = (e: any) => {
+    const { lat, lng } = e.latlng;
+    setFormData(prev => ({
+      ...prev,
+      coordinates: {
+        lat: lat,
+        lng: lng
+      }
+    }));
+  };
+
   // Close modal when clicking outside
   const handleBackdropClick = (e: React.MouseEvent) => {
     if (modalRef.current && !modalRef.current.contains(e.target as Node)) {
@@ -75,7 +166,7 @@ export default function RegisterLocationModal({ isOpen, onClose }: RegisterLocat
   const handleNextStep = () => {
     // Validate current step
     if (currentStep === 1) {
-      if (!formData.name || !formData.address) {
+      if (!formData.name || !formData.address || !formData.deviceId) {
         toast("Missing information", { description: "Please fill in all required fields before proceeding." }, "error")
         return
       }
@@ -152,7 +243,41 @@ export default function RegisterLocationModal({ isOpen, onClose }: RegisterLocat
     setIsSubmitting(true)
 
     try {
-      // Create a new location object from form data
+      // First create a BoothMetadata object for the blockchain
+      const boothMetadata: BoothMetadata = {
+        location: `${formData.address}, ${formData.city || "New York"}, ${formData.country}`,
+        displaySize: `${formData.dimensions.width}x${formData.dimensions.height} ${formData.dimensions.unit}`,
+        additionalInfo: JSON.stringify({
+          name: formData.name,
+          description: formData.description,
+          coordinates: formData.coordinates,
+          type: formData.type,
+          visibility: formData.visibility,
+          nearbyAttractions: formData.nearbyAttractions,
+          operatingHours: formData.operatingHours,
+          installationDate: formData.installationDate,
+          displayType: formData.displayType,
+          size: formData.size,
+          footTraffic: formData.footTraffic,
+          dailyImpressions: formData.dailyImpressions,
+          pricing: formData.pricing,
+          photos: formData.photos
+        })
+      };
+
+      // Register the booth on the blockchain
+      const deviceId = parseInt(formData.deviceId);
+      if (isNaN(deviceId) || deviceId <= 0) {
+        throw new Error("Invalid Device ID. Please enter a positive number.");
+      }
+      
+      const txHash = await registerBooth(deviceId, boothMetadata);
+      
+      if (!txHash) {
+        throw new Error("Failed to register location on the blockchain");
+      }
+
+      // Also create a local record for UI purposes
       const newLocation = {
         name: formData.name,
         description: formData.description,
@@ -168,23 +293,24 @@ export default function RegisterLocationModal({ isOpen, onClose }: RegisterLocat
         availableSlots: 10,
         images: formData.photos.length > 0 ? formData.photos : ["/placeholder.svg?height=600&width=800"],
         status: "pending" as "active" | "inactive" | "pending",
-      }
+      };
 
-      // Call the createLocation function from the store
-      await createLocation(newLocation)
+      // Call the createLocation function from the store for UI purposes
+      await createLocation(newLocation);
 
       toast(
         "Location registered",
-        { description: "Your location has been successfully registered and is pending verification." },
+        { description: "Your location has been successfully registered on the blockchain and is pending verification." },
         "success",
       )
 
       // Close the modal
       onClose()
     } catch (error) {
+      console.error("Registration error:", error);
       toast(
         "Registration failed",
-        { description: "There was an error registering your location. Please try again." },
+        { description: error instanceof Error ? error.message : "There was an error registering your location. Please try again." },
         "error",
       )
     } finally {
@@ -267,6 +393,20 @@ export default function RegisterLocationModal({ isOpen, onClose }: RegisterLocat
               <div>
                 <div className="mb-6">
                   <label className="block font-bold mb-2 text-lg">
+                    Device ID <span className="text-red-500">*</span>
+                  </label>
+                  <Input
+                    type="number"
+                    placeholder="Enter a unique device ID for your location"
+                    className="border-[4px] border-black rounded-none h-12 text-lg font-medium focus:border-[#0055FF] focus:ring-0 focus:translate-y-[-4px] transition-transform focus:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]"
+                    value={formData.deviceId}
+                    onChange={(e) => handleInputChange("deviceId", e.target.value)}
+                  />
+                  <p className="text-sm text-muted-foreground mt-1">Must be a unique number for your advertising booth</p>
+                </div>
+                
+                <div className="mb-6">
+                  <label className="block font-bold mb-2 text-lg">
                     Location Name <span className="text-red-500">*</span>
                   </label>
                   <Input
@@ -336,26 +476,79 @@ export default function RegisterLocationModal({ isOpen, onClose }: RegisterLocat
 
               <div className="flex flex-col">
                 <div className="border-[6px] border-black aspect-[4/3] relative bg-[#f5f5f5] mb-6">
-                  <div className="absolute inset-0 bg-[url('/placeholder.svg?height=600&width=800')] bg-cover bg-center"></div>
-                  <div className="absolute top-4 left-4 bg-white border-[3px] border-black p-2 font-bold">
-                    Click to place your location
-                  </div>
-
-                  {/* Map pin */}
-                  <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-12 h-12 group">
-                    <div className="w-12 h-12 bg-[#FF3366] border-[4px] border-black rounded-full flex items-center justify-center transform group-hover:scale-110 transition-transform">
-                      <MapPin className="w-6 h-6 text-white" />
-                    </div>
-                    <div className="absolute bottom-0 left-1/2 w-4 h-16 bg-[#FF3366] -z-10 -translate-x-1/2 translate-y-1/2 border-[4px] border-black"></div>
-
-                    {/* Radius indicator */}
-                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-48 h-48 border-[4px] border-dashed border-[#FF3366] rounded-full opacity-50"></div>
+                  {/* Leaflet map component */}
+                  {isMounted && leafletLoaded && mapVisible ? (
+                    <>
+                      <LeafletStyles />
+                      <MapContainer
+                        center={[formData.coordinates.lat, formData.coordinates.lng]}
+                        zoom={13}
+                        style={{ height: "100%", width: "100%" }}
+                        onClick={handleMapClick}
+                        className="border-none"
+                      >
+                        <TileLayer
+                          url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
+                          attribution="OpenStreetMap contributors and CARTO"
+                        />
+                        
+                        <Marker
+                          position={[formData.coordinates.lat, formData.coordinates.lng]}
+                          icon={createMarkerIcon()}
+                          draggable={true}
+                          eventHandlers={{
+                            dragend: (e) => {
+                              const marker = e.target;
+                              const position = marker.getLatLng();
+                              setFormData(prev => ({
+                                ...prev,
+                                coordinates: {
+                                  lat: position.lat,
+                                  lng: position.lng
+                                }
+                              }));
+                            }
+                          }}
+                        >
+                          <Popup className="rounded-none border-[3px] border-black font-bold">
+                            <div className="min-w-[150px]">
+                              <p className="font-bold text-lg">{formData.name || "Your Location"}</p>
+                              <p className="font-medium text-xs">{formData.coordinates.lat.toFixed(6)}, {formData.coordinates.lng.toFixed(6)}</p>
+                            </div>
+                          </Popup>
+                        </Marker>
+                      </MapContainer>
+                    </>
+                  ) : (
+                    <>
+                      <div className="absolute inset-0 bg-[url('/placeholder.svg?height=600&width=800')] bg-cover bg-center"></div>
+                      <div className="absolute top-4 left-4 bg-white border-[3px] border-black p-2 font-bold">
+                        Loading map...
+                      </div>
+                      
+                      {/* Map pin */}
+                      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-12 h-12 group">
+                        <div className="w-12 h-12 bg-[#FF3366] border-[4px] border-black rounded-full flex items-center justify-center transform group-hover:scale-110 transition-transform">
+                          <MapPin className="w-6 h-6 text-white" />
+                        </div>
+                        <div className="absolute bottom-0 left-1/2 w-4 h-16 bg-[#FF3366] -z-10 -translate-x-1/2 translate-y-1/2 border-[4px] border-black"></div>
+                      </div>
+                    </>
+                  )}
+                  
+                  {/* Instructions */}
+                  <div className="absolute bottom-4 right-4 bg-white border-[3px] border-black p-2 font-bold z-[1000]">
+                    Click or drag the marker to set location
                   </div>
                 </div>
 
                 <div className="border-[4px] border-black p-4 bg-[#f5f5f5] mb-6 flex-grow">
                   <h3 className="font-bold text-lg mb-3">Location Summary</h3>
                   <div className="space-y-3">
+                    <div className="flex justify-between">
+                      <span className="font-medium">Device ID:</span>
+                      <span className="font-bold">{formData.deviceId || "Not set"}</span>
+                    </div>
                     <div className="flex justify-between">
                       <span className="font-medium">Location Name:</span>
                       <span className="font-bold">{formData.name || "Not set"}</span>
@@ -367,6 +560,12 @@ export default function RegisterLocationModal({ isOpen, onClose }: RegisterLocat
                     <div className="flex justify-between">
                       <span className="font-medium">Address:</span>
                       <span className="font-bold">{formData.address || "Not set"}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="font-medium">Coordinates:</span>
+                      <span className="font-bold">
+                        {formData.coordinates.lat.toFixed(6)}, {formData.coordinates.lng.toFixed(6)}
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -869,9 +1068,9 @@ export default function RegisterLocationModal({ isOpen, onClose }: RegisterLocat
               <Button
                 className="bg-[#FF3366] text-white border-[4px] border-black hover:bg-[#FFCC00] hover:text-black transition-all font-bold px-6 py-3 h-auto rounded-none shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:-translate-y-1 flex items-center gap-2"
                 onClick={handleSubmit}
-                disabled={isSubmitting}
+                disabled={isSubmitting || isRegistering || isTransactionPending()}
               >
-                {isSubmitting ? (
+                {isSubmitting || isRegistering ? (
                   <>
                     <span>Processing...</span>
                     <svg

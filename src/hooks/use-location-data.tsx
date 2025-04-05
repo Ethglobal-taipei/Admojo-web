@@ -83,46 +83,31 @@ export function useLocationData() {
           const activeDeviceIds = await adContract.boothRegistry.getActiveLocations();
           
           // Also get all active locations regardless of booking status
-          const allActiveBoothIds = await adContract.boothRegistry.getActiveLocations();
+          // const allActiveBoothIds = await adContract.boothRegistry.getActiveLocations(); // Redundant call removed
           
           // Combine both sets of IDs, removing duplicates
-          const deviceIdsSet = new Set([...activeDeviceIds, ...allActiveBoothIds]);
+          const deviceIdsSet = new Set(activeDeviceIds);
           const deviceIds = Array.from(deviceIdsSet);
           console.log(`Found ${deviceIds.length} device IDs from blockchain`);
           
           if (deviceIds.length > 0) {
             // Fetch details for each location directly from blockchain
             try {
-              // Properly handle API expectations - if it expects a single ID, we'll fetch one by one
-              // If it accepts an array, we'll pass the array
               let fetchedBooths: any[] = [];
               
-              // Check if the getBoothDetails method exists and what type it expects
-              if (typeof adContract.boothRegistry.getBoothDetails === 'function') {
-                try {
-                  // Try to fetch all at once (if API supports arrays)
-                  fetchedBooths = await adContract.boothRegistry.getBoothDetails(deviceIds);
-                  console.log(`Fetched ${fetchedBooths.length} booth details at once`);
-                } catch (batchError) {
-                  console.warn("Batch fetch failed, trying individual fetches:", batchError);
-                  
-                  // If batch fetch fails, try individual fetches
-                  const boothPromises = deviceIds.map(id => 
-                    adContract.boothRegistry.getBoothDetails(id)
-                      .catch(e => {
-                        console.error(`Failed to fetch booth ${id}:`, e);
-                        return null;
-                      })
-                  );
-                  fetchedBooths = (await Promise.all(boothPromises)).filter(Boolean);
-                  console.log(`Fetched ${fetchedBooths.length} booth details individually`);
-                }
-              } else {
-                console.error("getBoothDetails method not found on boothRegistry");
-                throw new Error("Contract method not available");
-              }
+              // Fetch details individually
+              const boothPromises = deviceIds.map(id => 
+                adContract.boothRegistry.getBoothDetails(id)
+                  .catch(e => {
+                    console.error(`Failed to fetch booth ${id}:`, e);
+                    return null; // Return null on error for individual fetch
+                  })
+              );
+              // Wait for all individual fetches and filter out any nulls (errors)
+              fetchedBooths = (await Promise.all(boothPromises)).filter(Boolean);
+              console.log(`Fetched ${fetchedBooths.length} booth details individually`);
               
-              // Convert booth data to LocationData format - handle both array and single object responses
+              // Convert booth data to LocationData format
               const processBoothData = async (booth: any) => {
                 if (!booth) return null;
                 
