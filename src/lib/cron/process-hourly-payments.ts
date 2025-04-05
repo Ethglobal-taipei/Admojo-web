@@ -120,7 +120,7 @@ export async function processHourlyPayments() {
             const tapShare = totalTaps > 0 ? metrics.taps / totalTaps : 0;
             
             // Calculate base payment (5-minute rate = hourly rate / 12)
-            const baseRate = Number(campaign.hourlyRate) / 12;
+            const baseRate = 1000;
             const minimumPayment = baseRate * 0.1; // 10% minimum payment
             
             // Performance payment is split between views (60%) and taps (40%)
