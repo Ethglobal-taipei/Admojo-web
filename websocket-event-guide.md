@@ -44,7 +44,7 @@ Configure the subscription with:
 - Contract address
 - Topics array (containing event signature hash and any indexed parameters you want to filter on)
 
-### 4. Payment Function Integration
+### 4. Payment Functio   n Integration
 
 Implement a handler that:
 

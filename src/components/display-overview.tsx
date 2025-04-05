@@ -80,6 +80,7 @@ export default function DisplayOverview() {
   });
   const [isLoadingData, setIsLoadingData] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [locations, setLocations] = useState<Booth[]>([])
 
   // Animation state
   const [counters, setCounters] = useState({
@@ -92,15 +93,32 @@ export default function DisplayOverview() {
   
   // Add a loading timeout reference at the top of the component
   const loadingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const fetchedRef = useRef(false)
 
   // Clear any loading timeouts when component unmounts
   useEffect(() => {
+    // Define the fetch function
+    const fetchData = async () => {
+      try {
+        // Fetch all locations owned by the current user
+        await getMyProviderLocations();
+        fetchedRef.current = true;
+      } catch (err) {
+        console.error("Error fetching provider locations:", err);
+        setError(err instanceof Error ? err.message : "Failed to fetch locations");
+      }
+    };
+
+    // Execute it immediately
+    fetchData();
+
+    // Return the cleanup function
     return () => {
       if (loadingTimeoutRef.current) {
         clearTimeout(loadingTimeoutRef.current);
       }
     };
-  }, []);
+  }, [getMyProviderLocations]);
   
   // Add this helper function to ensure loading state is always cleared
   const safelySetLoadingState = useCallback((isLoading: boolean) => {
@@ -133,8 +151,8 @@ export default function DisplayOverview() {
     
     try {
       // Get metrics data
-      const now = Math.floor(Date.now() / 1000);
-      const thirtyDaysAgo = now - 30 * 24 * 60 * 60;
+        const now = Math.floor(Date.now() / 1000);
+        const thirtyDaysAgo = now - 30 * 24 * 60 * 60;
       
       // Default metrics in case we can't fetch real ones
       let metricsData = {
@@ -314,7 +332,7 @@ export default function DisplayOverview() {
   // Calculate aggregated metrics from processed booths
   const calculateMetrics = useCallback((booths: ProcessedBooth[]) => {
     if (!booths || booths.length === 0) {
-      setBoothMetrics({
+          setBoothMetrics({
         totalActive: 0,
         totalUrban: 0,
         totalImpressions: 0,
@@ -410,15 +428,15 @@ export default function DisplayOverview() {
       await fetchBoothData(true);
       
       // Also refresh legacy data for backward compatibility
-      refreshLocationData();
-    } catch (err) {
+          refreshLocationData();
+      } catch (err) {
       console.error("Error during refresh:", err);
       setError("Failed to refresh data: " + (err instanceof Error ? err.message : String(err)));
-    } finally {
+      } finally {
       console.log("Manual refresh completed");
-      setIsRefreshing(false);
-    }
-  };
+        setIsRefreshing(false);
+      }
+    };
   
   // Determine if data is loading from either source
   const isDataLoading = isLoadingData || locationDataLoading || isLoadingMyLocations || isLoadingBooth || isLoadingAggregatedMetrics;
@@ -476,94 +494,94 @@ export default function DisplayOverview() {
 
       {/* Show data cards once loaded */}
       {(!isDataLoading || providerBooths.length > 0) && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {/* Active Displays */}
-          <div className="border-[6px] border-black bg-[#0055FF] p-5 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] hover:shadow-[12px_12px_0px_0px_rgba(0,0,0,1)] hover:-translate-y-2 transition-all transform rotate-1 group">
-            <div className="flex items-start justify-between mb-3">
-              <h3 className="text-xl font-black text-white">ACTIVE DISPLAYS</h3>
-              <Monitor className="w-8 h-8 text-white opacity-70 group-hover:scale-125 transition-transform" />
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        {/* Active Displays */}
+        <div className="border-[6px] border-black bg-[#0055FF] p-5 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] hover:shadow-[12px_12px_0px_0px_rgba(0,0,0,1)] hover:-translate-y-2 transition-all transform rotate-1 group">
+          <div className="flex items-start justify-between mb-3">
+            <h3 className="text-xl font-black text-white">ACTIVE DISPLAYS</h3>
+            <Monitor className="w-8 h-8 text-white opacity-70 group-hover:scale-125 transition-transform" />
+          </div>
+          <div className="bg-white border-[4px] border-black p-3 mb-3 group-hover:translate-x-1 group-hover:-translate-y-1 transition-transform">
+            <div className="text-4xl font-black">
+              {counters.displays} <span className="text-2xl">Units</span>
             </div>
-            <div className="bg-white border-[4px] border-black p-3 mb-3 group-hover:translate-x-1 group-hover:-translate-y-1 transition-transform">
-              <div className="text-4xl font-black">
-                {counters.displays} <span className="text-2xl">Units</span>
-              </div>
-            </div>
-            <div className="flex items-center justify-between">
-              <div className="text-white font-bold">
+          </div>
+          <div className="flex items-center justify-between">
+            <div className="text-white font-bold">
                 {boothMetrics.totalUrban || legacyUrbanLocations} Urban, {(boothMetrics.totalActive || legacyActiveLocations) - (boothMetrics.totalUrban || legacyUrbanLocations)} Other
-              </div>
-              <div className="flex items-center gap-1 bg-black text-white px-2 py-1 font-bold text-sm group-hover:bg-[#FFCC00] group-hover:text-black transition-colors">
-                <TrendingUp className="w-4 h-4" />
+            </div>
+            <div className="flex items-center gap-1 bg-black text-white px-2 py-1 font-bold text-sm group-hover:bg-[#FFCC00] group-hover:text-black transition-colors">
+              <TrendingUp className="w-4 h-4" />
                 <span>+{Math.max(1, Math.floor((boothMetrics.totalActive || legacyActiveLocations) * 0.1))} this month</span>
               </div>
+          </div>
+        </div>
+
+        {/* Total Ad Impressions */}
+        <div className="border-[6px] border-black bg-[#FFCC00] p-5 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] hover:shadow-[12px_12px_0px_0px_rgba(0,0,0,1)] hover:-translate-y-2 transition-all transform -rotate-1 group">
+          <div className="flex items-start justify-between mb-3">
+            <h3 className="text-xl font-black">TOTAL IMPRESSIONS</h3>
+            <Eye className="w-8 h-8 opacity-70 group-hover:scale-125 transition-transform" />
+          </div>
+          <div className="bg-white border-[4px] border-black p-3 mb-3 group-hover:translate-x-1 group-hover:-translate-y-1 transition-transform">
+            <div className="text-4xl font-black">{counters.impressions.toLocaleString()}</div>
+          </div>
+          <div className="flex items-center justify-between">
+            <div className="font-bold">Last 30 Days</div>
+            <div className="flex items-center gap-1 bg-black text-white px-2 py-1 font-bold text-sm group-hover:bg-[#0055FF] group-hover:text-white transition-colors">
+              <TrendingUp className="w-4 h-4" />
+              <span>+12.8%</span>
             </div>
           </div>
+        </div>
 
-          {/* Total Ad Impressions */}
-          <div className="border-[6px] border-black bg-[#FFCC00] p-5 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] hover:shadow-[12px_12px_0px_0px_rgba(0,0,0,1)] hover:-translate-y-2 transition-all transform -rotate-1 group">
-            <div className="flex items-start justify-between mb-3">
-              <h3 className="text-xl font-black">TOTAL IMPRESSIONS</h3>
-              <Eye className="w-8 h-8 opacity-70 group-hover:scale-125 transition-transform" />
-            </div>
-            <div className="bg-white border-[4px] border-black p-3 mb-3 group-hover:translate-x-1 group-hover:-translate-y-1 transition-transform">
-              <div className="text-4xl font-black">{counters.impressions.toLocaleString()}</div>
-            </div>
-            <div className="flex items-center justify-between">
-              <div className="font-bold">Last 30 Days</div>
-              <div className="flex items-center gap-1 bg-black text-white px-2 py-1 font-bold text-sm group-hover:bg-[#0055FF] group-hover:text-white transition-colors">
-                <TrendingUp className="w-4 h-4" />
-                <span>+12.8%</span>
-              </div>
+        {/* Average Earnings Per Display */}
+        <div className="border-[6px] border-black bg-[#FF3366] p-5 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] hover:shadow-[12px_12px_0px_0px_rgba(0,0,0,1)] hover:-translate-y-2 transition-all transform rotate-1 group">
+          <div className="flex items-start justify-between mb-3">
+            <h3 className="text-xl font-black text-white">AVG EARNINGS/DISPLAY</h3>
+            <DollarSign className="w-8 h-8 text-white opacity-70 group-hover:scale-125 transition-transform" />
+          </div>
+          <div className="bg-white border-[4px] border-black p-3 mb-3 group-hover:translate-x-1 group-hover:-translate-y-1 transition-transform">
+            <div className="text-4xl font-black">
+              {counters.earnings.toLocaleString()} <span className="text-2xl">ADC</span>
             </div>
           </div>
-
-          {/* Average Earnings Per Display */}
-          <div className="border-[6px] border-black bg-[#FF3366] p-5 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] hover:shadow-[12px_12px_0px_0px_rgba(0,0,0,1)] hover:-translate-y-2 transition-all transform rotate-1 group">
-            <div className="flex items-start justify-between mb-3">
-              <h3 className="text-xl font-black text-white">AVG EARNINGS/DISPLAY</h3>
-              <DollarSign className="w-8 h-8 text-white opacity-70 group-hover:scale-125 transition-transform" />
-            </div>
-            <div className="bg-white border-[4px] border-black p-3 mb-3 group-hover:translate-x-1 group-hover:-translate-y-1 transition-transform">
-              <div className="text-4xl font-black">
-                {counters.earnings.toLocaleString()} <span className="text-2xl">ADC</span>
-              </div>
-            </div>
-            <div className="flex items-center justify-between">
-              <div className="text-white font-bold">Monthly Average</div>
-              <div className="flex items-center gap-1 bg-black text-white px-2 py-1 font-bold text-sm group-hover:bg-[#FFCC00] group-hover:text-black transition-colors">
-                <TrendingUp className="w-4 h-4" />
-                <span>+18.3%</span>
-              </div>
+          <div className="flex items-center justify-between">
+            <div className="text-white font-bold">Monthly Average</div>
+            <div className="flex items-center gap-1 bg-black text-white px-2 py-1 font-bold text-sm group-hover:bg-[#FFCC00] group-hover:text-black transition-colors">
+              <TrendingUp className="w-4 h-4" />
+              <span>+18.3%</span>
             </div>
           </div>
+        </div>
 
-          {/* Top Performing Location */}
-          <div className="border-[6px] border-black bg-white p-5 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] hover:shadow-[12px_12px_0px_0px_rgba(0,0,0,1)] hover:-translate-y-2 transition-all transform -rotate-1 group">
-            <div className="flex items-start justify-between mb-3">
-              <h3 className="text-xl font-black">TOP LOCATION</h3>
-              <MapPin className="w-8 h-8 opacity-70 group-hover:scale-125 transition-transform" />
-            </div>
-            <div className="bg-[#f5f5f5] border-[4px] border-black p-3 mb-3 group-hover:translate-x-1 group-hover:-translate-y-1 transition-transform">
+        {/* Top Performing Location */}
+        <div className="border-[6px] border-black bg-white p-5 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] hover:shadow-[12px_12px_0px_0px_rgba(0,0,0,1)] hover:-translate-y-2 transition-all transform -rotate-1 group">
+          <div className="flex items-start justify-between mb-3">
+            <h3 className="text-xl font-black">TOP LOCATION</h3>
+            <MapPin className="w-8 h-8 opacity-70 group-hover:scale-125 transition-transform" />
+          </div>
+          <div className="bg-[#f5f5f5] border-[4px] border-black p-3 mb-3 group-hover:translate-x-1 group-hover:-translate-y-1 transition-transform">
               <div className="text-2xl font-black truncate">
                 {boothMetrics.topPerforming?.location || 
                  (legacyTopLocation ? legacyTopLocation.name : "No locations yet")}
               </div>
-            </div>
-            <div className="flex items-center justify-between">
+          </div>
+          <div className="flex items-center justify-between">
               <div className="font-bold text-sm">
-                {boothMetrics.topPerforming ? 
-                  `Earning ${Math.floor((boothMetrics.topPerforming.earnings / boothMetrics.totalEarnings) * 100)}% of total` : 
+              {boothMetrics.topPerforming ? 
+                `Earning ${Math.floor((boothMetrics.topPerforming.earnings / boothMetrics.totalEarnings) * 100)}% of total` : 
                   legacyTopLocation && legacyTopLocation.earnings && legacyTotalEarnings ? 
                     `Earning ${Math.floor((legacyTopLocation.earnings / legacyTotalEarnings) * 100)}% of total` : 
-                    "Register your first display"}
-              </div>
-              <div className="flex items-center gap-1 bg-[#0055FF] text-white px-2 py-1 font-bold text-sm group-hover:bg-[#FF3366] transition-colors">
-                <TrendingUp className="w-4 h-4" />
-                <span>+5.2% growth</span>
-              </div>
+                  "Register your first display"}
+            </div>
+            <div className="flex items-center gap-1 bg-[#0055FF] text-white px-2 py-1 font-bold text-sm group-hover:bg-[#FF3366] transition-colors">
+              <TrendingUp className="w-4 h-4" />
+              <span>+5.2% growth</span>
             </div>
           </div>
         </div>
+      </div>
       )}
       
       {/* Empty state for no locations */}
