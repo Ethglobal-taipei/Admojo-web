@@ -26,6 +26,7 @@ import { Label } from "@/components/ui/label"
 import type { CampaignFormData } from "@/lib/store"
 import { CampaignMetadata } from "@/lib/blockchain/types"
 import CampaignLocationsMap from "@/components/map/campaign-locations-map"
+import { createAndFundCampaignHolder } from "@/lib/services/tokenomics.service"
 
 // Helper to calculate duration in days between two dates
 const calculateDurationDays = (startDate: string, endDate: string): number => {
@@ -211,9 +212,22 @@ export default function CampaignCreator() {
       toast("Preparing transaction", { description: "Submitting to blockchain..." }, "info")
       
       // Extract location IDs for the contract call
-      const locationIds = draftCampaign.targetLocations.map(loc => 
-        typeof loc.id === 'number' ? loc.id : parseInt(loc.id.toString())
-      ).filter(id => !isNaN(id))
+      const locationIds = draftCampaign.targetLocations.map(loc => {
+        // Primary option: use id if it's a number
+        if (typeof loc.id === 'number') return loc.id;
+        
+        // Secondary option: try to parse id if it exists
+        if (loc.id) return parseInt(loc.id.toString());
+        
+        // Fallback option: use deviceId if available
+        if (typeof loc.deviceId === 'number') return loc.deviceId;
+        
+        // If deviceId is a string, try to parse it
+        if (loc.deviceId) return typeof loc.deviceId === 'string' ? parseInt(loc.deviceId) : Number(loc.deviceId);
+        
+        // Last resort: return NaN which will be filtered out
+        return NaN;
+      }).filter(id => !isNaN(id))
       
       // Ensure wallet provider is ready
       if (!user?.wallet?.address) {
@@ -223,7 +237,25 @@ export default function CampaignCreator() {
       // Execute the contract function on the blockchain using the new hooks
       const hash = await createCampaign(campaignMetadata, locationIds)
       
+      // Set transaction hash for UI display
       setTransactionHash(hash)
+      
+      // Create a campaign-specific Metal holder and fund it with the campaign budget
+      if (hash) {
+        // Use hash as campaign ID for now (we could also extract actual ID from transaction receipt)
+        const campaignId = hash;
+        const userId = user.id;
+        const userWalletAddress = user.wallet.address;
+        
+        // Create and fund the campaign holder
+        await createAndFundCampaignHolder(
+          campaignId,
+          userId,
+          userWalletAddress,
+          draftCampaign.budget
+        );
+      }
+      
       toast("Campaign Created", { description: "Your campaign has been created successfully on the blockchain!" }, "success")
       resetDraftCampaign()
     } catch (err) {

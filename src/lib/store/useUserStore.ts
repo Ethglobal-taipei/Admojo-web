@@ -28,7 +28,6 @@ export interface UserState {
   } | null
 
   balances: {
-    USDC: number
     ADC: number
   } | null
 
@@ -244,7 +243,6 @@ export const useUserStore = create<UserState>()(
             // Use fallback data in case of API error
             set({
               balances: {
-                USDC: 5280.42,
                 ADC: 12450.0,
               },
               isLoading: false,
@@ -262,7 +260,6 @@ export const useUserStore = create<UserState>()(
             console.log("Using fallback balance data");
             set({
               balances: {
-                USDC: 5280.42,
                 ADC: 12450.0,
               },
               isLoading: false,
@@ -276,7 +273,6 @@ export const useUserStore = create<UserState>()(
             error: error instanceof Error ? error.message : "Error fetching balances",
             // Set fallback data even in case of error
             balances: {
-              USDC: 5280.42,
               ADC: 12450.0,
             }
           });

@@ -14,6 +14,7 @@ import { useRouter } from "next/navigation"
 import { usePrivy } from "@privy-io/react-auth"
 import { useBlockchainService, useBoothRegistry } from "@/hooks"
 import { CampaignMetadata } from "@/lib/blockchain/types"
+import { createAndFundCampaignHolder } from "@/lib/services/tokenomics.service"
 
 export default function CreateCampaignModal() {
   const router = useRouter()
@@ -124,6 +125,7 @@ export default function CreateCampaignModal() {
 
   const handleSubmit = async () => {
     if (!validateStep()) {
+      toast("Validation Failed", { description: "Please correct the errors in the form" }, "error");
       return;
     }
     
@@ -138,7 +140,7 @@ export default function CreateCampaignModal() {
     }
     
     if (!draftCampaign.targetLocations || draftCampaign.targetLocations.length === 0) {
-      toast("Locations Required", { description: "Please select at least one location for your campaign" }, "error");
+      setErrors({ ...errors, locations: "At least one location must be selected" });
       return;
     }
     
@@ -158,15 +160,39 @@ export default function CreateCampaignModal() {
       toast("Preparing transaction", { description: "Submitting to blockchain..." }, "info");
       
       // Extract location IDs for the contract call
-      const locationIds = draftCampaign.targetLocations.map(loc => 
-        typeof loc.id === 'number' ? loc.id : parseInt(loc.id.toString())
-      ).filter(id => !isNaN(id));
+      const locationIds = draftCampaign.targetLocations.map(loc => {
+        // Primary option: use id if it's a number
+        if (typeof loc.id === 'number') return loc.id;
+        
+        // Secondary option: try to parse id if it exists
+        if (loc.id) return parseInt(loc.id.toString());
+        
+        // Fallback option: use deviceId if available
+        if (typeof loc.deviceId === 'number') return loc.deviceId;
+        
+        // If deviceId is a string, try to parse it
+        if (loc.deviceId) return typeof loc.deviceId === 'string' ? parseInt(loc.deviceId) : Number(loc.deviceId);
+        
+        // Last resort: return NaN which will be filtered out
+        return NaN;
+      }).filter(id => !isNaN(id));
       
       // Execute the contract function on the blockchain using the new hook
       const hash = await createCampaign(campaignMetadata, locationIds);
       
       if (hash) {
         setTransactionHash(hash);
+        
+        // Create and fund campaign-specific Metal holder
+        if (user?.id && user?.wallet?.address) {
+          await createAndFundCampaignHolder(
+            hash, // Use hash as campaign ID
+            user.id,
+            user.wallet.address,
+            draftCampaign.budget
+          );
+        }
+        
         toast("Campaign Created", { description: "Your campaign has been created successfully on the blockchain!" }, "success");
         setTimeout(() => {
           resetDraftCampaign();

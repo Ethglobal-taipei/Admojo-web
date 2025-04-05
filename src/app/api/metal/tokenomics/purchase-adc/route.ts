@@ -1,146 +1,96 @@
 import { NextResponse } from "next/server";
+import { callMetalAPI, ADC_TOKEN_ADDRESS } from "../../route";
 import { prisma } from "@/lib/prisma";
-import { callMetalAPI } from "../../route";
 
-// Get ADC token address from environment
-const ADC_TOKEN_ADDRESS = process.env.ADC_TOKEN_ADDRESS || "0x1234567890abcdef1234567890abcdef12345678";
-
-// Mock function for token purchase (in production this would call an exchange API)
-async function purchaseTokens(walletAddress: string, amount: number, paymentMethod: string) {
-  // In real implementation, this would call an exchange service
-  // For now, we'll simulate a successful purchase
-  
-  // Return mock transaction data
-  return {
-    success: true,
-    txHash: `0x${Math.random().toString(16).slice(2)}${Math.random().toString(16).slice(2)}`,
-    amount,
-    fee: amount * 0.01, // 1% fee
-    timestamp: new Date()
-  };
-}
-
-// This endpoint handles purchasing ADC tokens
+// This endpoint handles the demo flow for advertisers to purchase ADC tokens
+// In a real-world scenario, this would involve a swap operation via Uniswap or similar
 export async function POST(req: Request) {
   try {
-    const { userId, amount, paymentMethod, walletAddress } = await req.json();
+    const { usdAmount, walletAddress } = await req.json();
     
-    console.log("Purchase request:", { userId, amount, paymentMethod, walletAddress });
-    
-    if (!userId || !amount || !paymentMethod || !walletAddress) {
+    if (!usdAmount || !walletAddress) {
       return NextResponse.json(
-        { error: "Missing required parameters: userId, amount, paymentMethod, and walletAddress are required" },
+        { error: "Missing required parameters: usdAmount, userId" },
         { status: 400 }
       );
     }
     
-    // Fetch user to verify existence
-    const user = await prisma.user.findUnique({
-      where: { id: userId }
+    // Get holder information to get their wallet address
+    const holderResponse = await prisma.user.findFirst({
+      where: {
+        walletAddress : walletAddress
+      }
     });
-    
-    if (!user) {
+
+    if (!holderResponse) {
       return NextResponse.json(
-        { error: "User not found" },
+        { error: "Could not find holder information" },
         { status: 404 }
       );
     }
     
-    // Verify user matches wallet address
-    if (user.walletAddress !== walletAddress) {
-      return NextResponse.json(
-        { error: "Wallet address does not match user" },
-        { status: 400 }
-      );
-    }
+    console.log(holderResponse);
+
+
     
-    // Process the payment through exchange (mocked for now)
-    const purchaseResult = await purchaseTokens(walletAddress, amount, paymentMethod);
+    // Calculate ADC tokens based on USD amount
+    // Using 2:1 ratio (2 USDC = 1 ADC) as requested
+    const adcAmount = usdAmount / 2;
     
-    if (!purchaseResult.success) {
-      return NextResponse.json(
-        { error: "Failed to purchase tokens", details: purchaseResult },
-        { status: 500 }
-      );
-    }
-    
-    // Create transaction record
-    const transaction = await prisma.transaction.create({
-      data: {
-        type: "PURCHASE",
-        amount: amount,
-        token: "ADC",
-        status: "COMPLETED",
-        txHash: purchaseResult.txHash,
-        userId: userId
+    // Distribute ADC tokens from merchant account to advertiser's holder
+    const distributeResponse = await callMetalAPI(
+      `/token/${ADC_TOKEN_ADDRESS}/distribute`,
+      "POST",
+      {
+        sendToAddress: holderResponse.holderAddress,
+        amount: adcAmount
       }
-    });
+    );
     
-    // Update user balance in database
-    await prisma.balance.upsert({
-      where: { userId },
-      update: {
-        ADC: { increment: amount }
-      },
-      create: {
-        userId,
-        ADC: amount,
-        USDC: 0
-      }
-    });
-    
-    // Add tokens to the user's Metal holder account
+    // Record the transaction in the database
     try {
-      // Check if holder already has token balance
-      const holderTokens = await callMetalAPI(
-        `/holder/${user.holderAddress}/tokens`,
-        "GET"
-      );
-      
-      const hasAdcToken = holderTokens.some((token: any) => 
-        token.token.address.toLowerCase() === ADC_TOKEN_ADDRESS.toLowerCase()
-      );
-      
-      if (!hasAdcToken) {
-        // Add token to holder if not present
-        await callMetalAPI(
-          `/holder/${user.holderAddress}/tokens`,
-          "POST",
-          {
-            tokenAddress: ADC_TOKEN_ADDRESS
-          }
-        );
-      }
-      
-      // Update token balance
-      await callMetalAPI(
-        `/holder/${user.holderAddress}/tokens/${ADC_TOKEN_ADDRESS}/balance`,
-        "PUT",
-        {
-          balance: amount
+      // Get user from the database by userId
+      const user = await prisma.user.findFirst({
+        where: { 
+          OR: [
+            { walletAddress: walletAddress },
+            { holderAddress: holderResponse.holderAddress }
+          ]
         }
-      );
+      });
       
-    } catch (metalError) {
-      console.error("Error updating Metal balance:", metalError);
-      // Continue with response even if Metal update fails
+      if (user) {
+        // Create transaction record
+        await prisma.transaction.create({
+          data: {
+            type: "purchase",
+            amount: adcAmount,
+            token: "ADC",
+            status: "completed",
+            txHash: distributeResponse.transactionHash || "local-tx",
+            userId: user.id
+          }
+        });
+        
+       
+      }
+    } catch (dbError) {
+      console.error("Database error in purchase-adc:", dbError);
+      // Continue with the response even if DB operation fails
     }
     
     return NextResponse.json({
       success: true,
-      message: "Successfully purchased ADC tokens",
-      transaction: {
-        id: transaction.id,
-        amount,
-        txHash: purchaseResult.txHash,
-        timestamp: purchaseResult.timestamp
-      }
+      message: `Successfully purchased ${adcAmount} ADC tokens for ${usdAmount} USDC`,
+      transaction: distributeResponse,
+      adcAmount,
+      usdAmount
     });
     
   } catch (error) {
     console.error("Error in purchase-adc:", error);
     return NextResponse.json(
-      { error: "Failed to purchase ADC tokens", details: (error as Error).message },
+      { error: "Failed to process ADC token purchase", details: (error as Error).message },
       { status: 500 }
     );
   }

@@ -5,6 +5,30 @@ import { ArrowDown, RefreshCw, Settings } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { toast } from "sonner"
+import { useUserStore } from "@/lib/store"
+import { usePrivy } from '@privy-io/react-auth'
+
+interface Balances {
+  USDC: number;
+  ADC: number;
+  [key: string]: number;
+}
+
+// Chevron icon component
+function ChevronIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      width="24"
+      height="24"
+      viewBox="0 0 24 24"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      className={className}
+    >
+      <path d="M6 9L12 15L18 9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
 
 export default function SwapInterface() {
   const [fromAmount, setFromAmount] = useState("")
@@ -14,15 +38,16 @@ export default function SwapInterface() {
   const [isSwapping, setIsSwapping] = useState(false)
   const [isCalculating, setIsCalculating] = useState(false)
   const [swapRotation, setSwapRotation] = useState(0)
+  
+  // Get user info from Privy
+  const { user } = usePrivy()
+  
+  // Get user store for balances
+  const userStore = useUserStore()
+  const balances = userStore.balances as Balances
 
-  // Mock balances
-  const balances = {
-    USDC: 5280.42,
-    ADC: 12450.0,
-  }
-
-  // Mock exchange rate
-  const exchangeRate = 2.35
+  // Fixed exchange rate
+  const exchangeRate = 0.5 // 2 USDC = 1 ADC (0.5 ADC per USDC)
 
   useEffect(() => {
     if (fromAmount && fromAmount !== "0") {
@@ -41,7 +66,7 @@ export default function SwapInterface() {
     }
   }, [fromAmount, fromToken, toToken])
 
-  const handleFromAmountChange = (e) => {
+  const handleFromAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value
     if (value === "" || /^\d*\.?\d*$/.test(value)) {
       setFromAmount(value)
@@ -49,7 +74,7 @@ export default function SwapInterface() {
   }
 
   const handleMaxClick = () => {
-    setFromAmount(balances[fromToken].toString())
+    setFromAmount(balances?.[fromToken]?.toString() || "0")
   }
 
   const handleSwapTokens = () => {
@@ -61,36 +86,68 @@ export default function SwapInterface() {
     setToToken(tempToken)
   }
 
-  const handleSwap = () => {
+  const handleSwap = async () => {
     if (!fromAmount || Number.parseFloat(fromAmount) === 0) {
-      toast({
-        title: "Invalid amount",
-        description: "Please enter an amount to swap",
-        variant: "destructive",
+      toast.error("Invalid amount", {
+        description: "Please enter an amount to swap"
       })
       return
     }
 
-    if (Number.parseFloat(fromAmount) > balances[fromToken]) {
-      toast({
-        title: "Insufficient balance",
-        description: `You don't have enough ${fromToken}`,
-        variant: "destructive",
+    if (!user?.wallet?.address) {
+      toast.error("Wallet not connected", {
+        description: "Please connect your wallet to swap tokens"
+      })
+      return
+    }
+
+    if (Number.parseFloat(fromAmount) > (balances?.[fromToken] || 0)) {
+      toast.error("Insufficient balance", {
+        description: `You don't have enough ${fromToken}`
       })
       return
     }
 
     setIsSwapping(true)
-    setTimeout(() => {
-      setIsSwapping(false)
-      toast({
-        title: "Swap Successful!",
-        description: `Swapped ${fromAmount} ${fromToken} to ${toAmount} ${toToken}`,
-      })
+    
+    try {
+      // Call the API to swap tokens
+      const walletAddress = user.wallet.address
+      const response = await fetch('/api/metal/tokenomics/purchase-adc', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ 
+          usdAmount: parseFloat(fromAmount),
+          walletAddress
+        }),
+      });
+      
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to swap tokens');
+      }
+      
+      // Update balances after successful swap
+      await userStore.updateBalances({});
+      
+      toast.success("Swap Successful!", {
+        description: `Swapped ${fromAmount} ${fromToken} to ${data.adcAmount} ${toToken}`
+      });
+      
       // Reset form
       setFromAmount("")
       setToAmount("")
-    }, 2000)
+    } catch (error) {
+      console.error('Swap error:', error);
+      toast.error("Swap Failed", {
+        description: error instanceof Error ? error.message : "There was an error swapping your tokens"
+      });
+    } finally {
+      setIsSwapping(false);
+    }
   }
 
   return (
@@ -117,7 +174,7 @@ export default function SwapInterface() {
           <div className="flex justify-between mb-2">
             <span className="font-bold text-lg">From</span>
             <div className="flex items-center gap-2">
-              <span className="text-sm font-medium">Balance: {balances[fromToken].toLocaleString()}</span>
+              {/* <span className="text-sm font-medium">Balance: {balances[fromToken].toLocaleString()}</span> */}
               <Button
                 variant="outline"
                 size="sm"
@@ -157,7 +214,7 @@ export default function SwapInterface() {
             </div>
           </div>
 
-          {fromAmount && Number.parseFloat(fromAmount) > balances[fromToken] && (
+          { (
             <div className="mt-2 text-[#FF3366] font-bold text-sm">Insufficient {fromToken} balance</div>
           )}
         </div>
@@ -180,7 +237,7 @@ export default function SwapInterface() {
           <div className="flex justify-between mb-2">
             <span className="font-bold text-lg">To</span>
             <div className="flex items-center gap-2">
-              <span className="text-sm font-medium">Balance: {balances[toToken].toLocaleString()}</span>
+              {/* <span className="text-sm font-medium">Balance: {balances[toToken].toLocaleString()}</span> */}
             </div>
           </div>
 
@@ -233,9 +290,7 @@ export default function SwapInterface() {
           className="w-full mt-6 bg-[#0055FF] text-white border-[6px] border-black hover:bg-[#FFCC00] hover:text-black transition-all font-bold text-xl py-6 h-auto rounded-none shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] hover:-translate-y-2 relative overflow-hidden group disabled:opacity-70 disabled:hover:translate-y-0 disabled:hover:shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]"
           onClick={handleSwap}
           disabled={
-            !fromAmount ||
-            Number.parseFloat(fromAmount) === 0 ||
-            Number.parseFloat(fromAmount) > balances[fromToken] ||
+           
             isSwapping
           }
         >
@@ -257,20 +312,3 @@ export default function SwapInterface() {
     </section>
   )
 }
-
-// Simple chevron icon component
-function ChevronIcon({ className }) {
-  return (
-    <svg
-      width="24"
-      height="24"
-      viewBox="0 0 24 24"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-      className={className}
-    >
-      <path d="M6 9L12 15L18 9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  )
-}
-

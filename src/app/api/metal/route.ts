@@ -4,7 +4,7 @@ const METAL_API_URL = "https://api.metal.build";
 const METAL_API_KEY = process.env.METAL_API_KEY;
 
 // ADC token address - this would be set after token creation
-const ADC_TOKEN_ADDRESS = process.env.ADC_TOKEN_ADDRESS || "0x1234567890abcdef1234567890abcdef12345678"; // Placeholder
+const ADC_TOKEN_ADDRESS = "0xa3239522f692bf01727ab56681f564049d86f545" // Placeholder
 const ESCROW_ADDRESS = "0x00";
 
 if (!METAL_API_KEY) {
@@ -24,10 +24,13 @@ async function callMetalAPI(endpoint: string, method: string, body?: any) {
         "Content-Type": "application/json",
         "x-api-key": METAL_API_KEY || "",
       },
-      body: body ? JSON.stringify(body) : undefined,
+      body: JSON.stringify(body) ,
     });
     
+    console.log(body);
+
     if (!response.ok) {
+      console.log(response);  
       const errorText = await response.text();
       throw new Error(`Metal API error: ${response.status} - ${errorText}`);
     }

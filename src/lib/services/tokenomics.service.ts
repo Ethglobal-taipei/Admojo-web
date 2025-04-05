@@ -411,4 +411,104 @@ export async function updateCampaignBudget(
     }, "error");
     return null;
   }
+}
+
+/**
+ * Creates a Metal holder account for a campaign and funds it with the specified budget.
+ * This is a unified function that handles both creating the campaign holder and
+ * transferring tokens from the user's holder to the campaign holder.
+ * 
+ * @param campaignId The ID of the campaign.
+ * @param userId The ID of the user funding the campaign.
+ * @param userHolderAddress The Metal holder address of the user.
+ * @param budgetAmount The amount of ADC tokens to allocate to the campaign.
+ * @returns True if both operations are successful, false otherwise.
+ */
+export async function createAndFundCampaignHolder(
+  campaignId: string,
+  userId: string,
+  userHolderAddress: string,
+  budgetAmount: number
+): Promise<boolean> {
+  try {
+    console.log("Creating and funding campaign holder:", {
+      campaignId,
+      userId,
+      budgetAmount
+    });
+
+    // Step 1: Create campaign holder
+    const holderResponse = await fetch('/api/metal/tokenomics/campaign-holder', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ campaignId }),
+    });
+
+    const holderData = await holderResponse.json();
+
+    if (!holderResponse.ok) {
+      console.error("Failed to create campaign holder:", holderData.error, holderData.details);
+      toast("Campaign Holder Creation Failed", { 
+        description: `Could not create campaign holder: ${holderData.error || holderResponse.statusText}` 
+      }, "error");
+      return false;
+    }
+
+    console.log("Successfully created campaign holder:", holderData);
+    
+    // Get the campaign holder address from the response
+    const campaignHolderAddress = holderData.holder?.address;
+    
+    if (!campaignHolderAddress) {
+      console.error("Missing campaign holder address in response");
+      toast("Campaign Setup Failed", { 
+        description: "Could not get campaign holder information" 
+      }, "error");
+      return false;
+    }
+
+    // Step 2: Fund the campaign holder with the budget amount
+    if (budgetAmount <= 0) {
+      console.log("Budget amount is zero or negative, skipping funding step");
+      return true;
+    }
+
+    const fundResponse = await fetch('/api/metal/tokenomics/withdraw', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ 
+        holderId: userId,
+        amount: budgetAmount, 
+        toAddress: campaignHolderAddress, 
+        campaignId 
+      }),
+    });
+
+    const fundData = await fundResponse.json();
+
+    if (!fundResponse.ok || !fundData.success) {
+      console.error("Failed to fund campaign:", fundData.error, fundData.details);
+      toast("Campaign Funding Failed", { 
+        description: `Could not fund campaign with budget: ${fundData.error || fundResponse.statusText}` 
+      }, "error");
+      return false;
+    }
+
+    console.log("Successfully funded campaign holder:", fundData);
+    toast("Campaign Setup Complete", { 
+      description: `Campaign holder created and funded with ${budgetAmount} ADC tokens!` 
+    }, "success");
+    
+    return true;
+  } catch (error) {
+    console.error("Error in createAndFundCampaignHolder:", error);
+    toast("Campaign Setup Error", { 
+      description: "There was an error setting up your campaign's token allocation." 
+    }, "error");
+    return false;
+  }
 } 
