@@ -149,19 +149,6 @@ contract PerformanceOracle {
         return (metric.views, metric.taps);
     }
 
-    function getAggregatedMetrics(
-        uint _deviceId,
-        uint _startTime,
-        uint _endTime
-    ) external view returns (uint totalViews, uint totalTaps) {
-        for (uint t = _startTime; t <= _endTime; t++) {
-            Metric memory metric = metrics[_deviceId][t];
-            totalViews += metric.views;
-            totalTaps += metric.taps;
-        }
-        return (totalViews, totalTaps);
-    }
-
     function updateViews(
         uint _deviceId,
         uint _timestamp,

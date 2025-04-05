@@ -27,6 +27,8 @@ export class ViemPerformanceOracleService extends ViemBlockchainService implemen
   private readonly SECONDS_PER_HOUR = 3600;
   private readonly SECONDS_PER_DAY = 86400;
   private readonly SECONDS_PER_WEEK = 604800;
+  private readonly SECONDS_PER_5_MINUTES = 300; // 5 minutes in seconds
+  private readonly ROUNDING_THRESHOLD = 150; // 2.5 minutes in seconds
   private readonly MAX_CHUNK_SIZE = 3600; // 1 hour in seconds for aggregation chunks
   
   /**
@@ -114,6 +116,20 @@ export class ViemPerformanceOracleService extends ViemBlockchainService implemen
     };
   }
   
+  /**
+   * Rounds a timestamp to the nearest 5-minute interval based on the IoT API logic
+   * @param timestamp Original timestamp
+   * @returns Rounded timestamp
+   */
+  private roundToNearest5Minutes(timestamp: number): number {
+    const remainder = timestamp % this.SECONDS_PER_5_MINUTES;
+    if (remainder <= this.ROUNDING_THRESHOLD) {
+      return timestamp - remainder;
+    } else {
+      return timestamp + (this.SECONDS_PER_5_MINUTES - remainder);
+    }
+  }
+  
   // ====== PerformanceOracleService Implementation ======
   
   /**
@@ -156,11 +172,12 @@ export class ViemPerformanceOracleService extends ViemBlockchainService implemen
    */
   async getMetrics(deviceId: number, timestamp: number): Promise<Metrics> {
     try {
+      const roundedTimestamp = this.roundToNearest5Minutes(timestamp);
       const result = await this.publicClient.readContract({
         address: this._contractAddress,
         abi: performanceOracleAbi.abi,
         functionName: 'getMetrics',
-        args: [deviceId, timestamp]
+        args: [deviceId, roundedTimestamp]
       }) as [bigint, bigint];
       
       const [views, taps] = result;
@@ -180,55 +197,36 @@ export class ViemPerformanceOracleService extends ViemBlockchainService implemen
    * @param deviceId Device ID
    * @param startTime Start timestamp
    * @param endTime End timestamp
-   * @param chunkSize Size of chunks to split requests into (default: 1 hour)
    * @returns Aggregated metrics
    */
   async getAggregatedMetrics(
     deviceId: number, 
     startTime: number, 
-    endTime: number, 
-    chunkSize: number = this.MAX_CHUNK_SIZE
+    endTime: number
   ): Promise<AggregatedMetrics> {
     try {
-      if (endTime - startTime <= chunkSize) {
-        // If the time range is small enough, just make a single call
+      let totalViews = 0;
+      let totalTaps = 0;
+      
+      // Round start and end times to nearest 5-minute intervals
+      const roundedStartTime = this.roundToNearest5Minutes(startTime);
+      const roundedEndTime = this.roundToNearest5Minutes(endTime);
+      
+      // Process each 5-minute interval
+      for (let currentTime = roundedStartTime; currentTime <= roundedEndTime; currentTime += this.SECONDS_PER_5_MINUTES) {
         const result = await this.publicClient.readContract({
           address: this._contractAddress,
           abi: performanceOracleAbi.abi,
-          functionName: 'getAggregatedMetrics',
-          args: [deviceId, startTime, endTime]
+          functionName: 'getMetrics',
+          args: [deviceId, currentTime]
         }) as [bigint, bigint];
         
-        const [totalViews, totalTaps] = result;
-        
-        return {
-          totalViews: Number(totalViews),
-          totalTaps: Number(totalTaps)
-        };
-      } else {
-        // For large time periods, split into chunks to avoid gas limits
-        let totalViews = 0;
-        let totalTaps = 0;
-        
-        // Process in chunks
-        for (let chunkStart = startTime; chunkStart < endTime; chunkStart += chunkSize) {
-          const chunkEnd = Math.min(chunkStart + chunkSize - 1, endTime);
-          
-          const result = await this.publicClient.readContract({
-            address: this._contractAddress,
-            abi: performanceOracleAbi.abi,
-            functionName: 'getAggregatedMetrics',
-            args: [deviceId, chunkStart, chunkEnd]
-          }) as [bigint, bigint];
-          
-          const [chunkViews, chunkTaps] = result;
-          
-          totalViews += Number(chunkViews);
-          totalTaps += Number(chunkTaps);
-        }
-        
-        return { totalViews, totalTaps };
+        const [views, taps] = result;
+        totalViews += Number(views);
+        totalTaps += Number(taps);
       }
+      
+      return { totalViews, totalTaps };
     } catch (error) {
       console.error('Get aggregated metrics error:', error);
       throw error;
