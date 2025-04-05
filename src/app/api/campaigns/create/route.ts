@@ -5,6 +5,7 @@ import {
   createCampaign as dbCreateCampaign,
   updateAnalytics
 } from '@/lib/db'
+import { createCampaignHolder } from '@/lib/services/tokenomics.service'
 
 export async function POST(req: NextRequest) {
   try {
@@ -81,6 +82,27 @@ export async function POST(req: NextRequest) {
       views: 0,
       taps: 0
     })
+    
+    // Create a Metal holder for the campaign automatically
+    // This is only done for active campaigns to avoid creating holders for drafts
+    if (campaign.isActive) {
+      try {
+        console.log(`Automatically creating Metal holder for new campaign: ${campaign.id}`);
+        const holderCreated = await createCampaignHolder(campaign.id);
+        
+        if (holderCreated) {
+          console.log(`Successfully created Metal holder for campaign: ${campaign.id}`);
+        } else {
+          console.warn(`Failed to create Metal holder for campaign: ${campaign.id}`);
+        }
+      } catch (error) {
+        console.error(`Error creating Metal holder for campaign ${campaign.id}:`, error);
+        // We don't want to fail the campaign creation if the holder creation fails
+        // The holder can be created later when needed
+      }
+    } else {
+      console.log(`Skipping Metal holder creation for inactive campaign: ${campaign.id}`);
+    }
     
     // If locations are provided, create bookings
     if (targetLocations && targetLocations.length > 0) {

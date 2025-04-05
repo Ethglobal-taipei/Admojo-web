@@ -517,7 +517,7 @@ export async function createAndFundCampaignHolder(
 /**
  * Interface for token balance response from Metal API
  */
-interface TokenBalanceResponse {
+export interface TokenBalanceResponse {
   name: string;       // The name of the token
   symbol: string;     // The token's symbol
   id: string;         // The token's contract address

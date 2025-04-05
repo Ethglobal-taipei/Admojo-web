@@ -12,7 +12,8 @@ import {
   PlayCircleIcon, 
   PauseCircleIcon, 
   PlusCircleIcon, 
-  RefreshCw
+  RefreshCw,
+  DollarSign
 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -22,10 +23,17 @@ import { formatAddress } from "@/lib/utils"
 import DashboardHeader from "../dashboard/components/dashboard-header"
 import type { Campaign } from "@/lib/blockchain/types"
 
+// Add import for tokenomics service
+import { 
+  getCampaignTokenBalance,
+  createCampaignHolder,
+  TokenBalanceResponse
+} from "@/lib/services/tokenomics.service"
+
 // Enhanced campaign type for UI
 interface EnhancedCampaign {
   id: string;
-    name: string;
+  name: string;
   status: number;
   createdAt: number;
   impressions: number;
@@ -35,6 +43,8 @@ interface EnhancedCampaign {
   budgetSpent: number;
   durationDays: number;
   progressPercentage: number;
+  tokenBalance: TokenBalanceResponse | null;
+  isLoadingBalance: boolean;
 }
 
 export default function CampaignsPage() {
@@ -75,6 +85,69 @@ export default function CampaignsPage() {
   useEffect(() => {
     setLoading(isLoadingAllCampaigns)
   }, [isLoadingAllCampaigns])
+  
+  // Function to fetch a campaign's token balance
+  const fetchCampaignBalance = async (campaignId: string, index: number) => {
+    setCampaigns(prev => {
+      const updated = [...prev];
+      // Set loading state for this specific campaign
+      updated[index] = { ...updated[index], isLoadingBalance: true };
+      return updated;
+    });
+    
+    try {
+      // Try to get campaign balance
+      let balance = await getCampaignTokenBalance(campaignId);
+      
+      // If no balance found, campaign might not have a holder yet, so try to create one
+      if (!balance) {
+        console.log(`No holder found for campaign ${campaignId}, attempting to create one...`);
+        
+        // Only try to create holders for active campaigns
+        const campaign = campaigns[index];
+        if (campaign.status === 1) { // Active campaign
+          // Attempt to create a holder for this campaign
+          const holderCreated = await createCampaignHolder(campaignId);
+          
+          if (holderCreated) {
+            console.log(`Campaign holder created successfully for campaign ${campaignId}`);
+            
+            // Wait a moment for the data to propagate
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            
+            // Try to fetch the campaign balance again
+            balance = await getCampaignTokenBalance(campaignId);
+          } else {
+            console.warn(`Could not create a holder for campaign ${campaignId}`);
+          }
+        }
+      }
+      
+      setCampaigns(prev => {
+        const updated = [...prev];
+        // Update with the fetched balance
+        updated[index] = { 
+          ...updated[index], 
+          tokenBalance: balance,
+          isLoadingBalance: false,
+          // Update budgets based on real balance if available
+          budgetAllocated: balance?.balance || updated[index].budgetAllocated,
+          budgetSpent: Math.max(0, (updated[index].budgetAllocated - (balance?.balance || 0))),
+          progressPercentage: balance ? 
+            ((updated[index].budgetAllocated - balance.balance) / updated[index].budgetAllocated) * 100 : 
+            updated[index].progressPercentage
+        };
+        return updated;
+      });
+    } catch (error) {
+      console.error(`Error fetching balance for campaign ${campaignId}:`, error);
+      setCampaigns(prev => {
+        const updated = [...prev];
+        updated[index] = { ...updated[index], isLoadingBalance: false };
+        return updated;
+      });
+    }
+  };
   
   // Transform campaign data from blockchain to UI format
   useEffect(() => {
@@ -134,11 +207,19 @@ export default function CampaignsPage() {
         budgetAllocated: budget,
         budgetSpent,
         durationDays: duration,
-        progressPercentage: (budgetSpent / budget) * 100
+        progressPercentage: (budgetSpent / budget) * 100,
+        tokenBalance: null,
+        isLoadingBalance: false
       }
     })
     
     setCampaigns(enhancedCampaigns)
+    
+    // Fetch balances for all campaigns
+    enhancedCampaigns.forEach((campaign, index) => {
+      fetchCampaignBalance(campaign.id, index);
+    });
+    
   }, [allCampaigns, address])
   
   // Function to refresh data
@@ -146,6 +227,11 @@ export default function CampaignsPage() {
     setLoading(true)
     fetchedRef.current = false
     getAllCampaigns()
+    
+    // Also refresh balances for current campaigns
+    campaigns.forEach((campaign, index) => {
+      fetchCampaignBalance(campaign.id, index);
+    });
   }
   
   const getStatusBadge = (status: number) => {
@@ -300,12 +386,20 @@ export default function CampaignsPage() {
                     <div className="mb-4">
                       <div className="flex justify-between text-sm mb-1">
                         <span>Budget spent</span>
-                        <span className="font-medium">${campaign.budgetSpent.toFixed(2)} / ${campaign.budgetAllocated.toFixed(2)}</span>
+                        <span className="font-medium">
+                          {campaign.isLoadingBalance ? (
+                            <RefreshCw className="inline h-3 w-3 animate-spin" />
+                          ) : (
+                            <>
+                              {campaign.budgetSpent.toFixed(2)} / {campaign.budgetAllocated.toFixed(2)} ADC
+                            </>
+                          )}
+                        </span>
                       </div>
                       <Progress value={campaign.progressPercentage} className="h-[6px] bg-gray-100" />
                     </div>
 
-                    <div className="grid grid-cols-3 gap-4 mb-4">
+                    <div className="grid grid-cols-4 gap-4 mb-4">
                       <div className="bg-gray-50 p-2 border border-gray-200 rounded">
                         <div className="text-xs text-gray-500">Impressions</div>
                         <div className="font-bold">{campaign.impressions}</div>
@@ -313,10 +407,22 @@ export default function CampaignsPage() {
                       <div className="bg-gray-50 p-2 border border-gray-200 rounded">
                         <div className="text-xs text-gray-500">Clicks</div>
                         <div className="font-bold">{campaign.clicks}</div>
-                    </div>
+                      </div>
                       <div className="bg-gray-50 p-2 border border-gray-200 rounded">
                         <div className="text-xs text-gray-500">Conversions</div>
                         <div className="font-bold">{campaign.conversions}</div>
+                      </div>
+                      <div className="bg-[#f5f5f5] p-2 border-[2px] border-black rounded-none">
+                        <div className="text-xs font-bold flex items-center">
+                          <DollarSign className="h-3 w-3 mr-1" /> Balance
+                        </div>
+                        <div className="font-bold">
+                          {campaign.isLoadingBalance ? (
+                            <RefreshCw className="inline h-3 w-3 animate-spin" />
+                          ) : (
+                            campaign.tokenBalance?.balance.toFixed(2) || "0.00"
+                          )}
+                        </div>
                       </div>
                     </div>
                     

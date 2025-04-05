@@ -161,7 +161,8 @@ export async function createCampaign(data: Prisma.CampaignCreateInput): Promise<
       locationIds: data.locationIds,
       onChainId: data.onChainId,
       views: data.views,
-      taps: data.taps
+      taps: data.taps,
+      holderAddress: (data as any).holderAddress
     }
   });
 }

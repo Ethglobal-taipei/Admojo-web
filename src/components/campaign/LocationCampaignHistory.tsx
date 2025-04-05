@@ -4,11 +4,17 @@ import { useState, useEffect } from "react"
 import { useAdContract } from "@/hooks/use-ad-contract"
 import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
-import { AlertCircle, RefreshCw, Calendar } from "lucide-react"
+import { AlertCircle, RefreshCw, Calendar, Wallet } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { format } from "date-fns"
 import { useRouter } from "next/navigation"
+import { useLocationStore } from "@/lib/store"
+import { 
+  getUserTokenBalance, 
+  getCampaignTokenBalance,
+  TokenBalanceResponse
+} from "@/lib/services/tokenomics.service"
 
 interface LocationCampaignHistoryProps {
   deviceId: number
@@ -25,12 +31,28 @@ export function LocationCampaignHistory({
 }: LocationCampaignHistoryProps) {
   const router = useRouter()
   const { adContract } = useAdContract()
+  const { locations } = useLocationStore()
   
   const [campaigns, setCampaigns] = useState<any[]>([])
   const [activeCampaigns, setActiveCampaigns] = useState<any[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [isRefreshing, setIsRefreshing] = useState(false)
+  
+  // State for real token balances
+  const [campaignBalance, setCampaignBalance] = useState<TokenBalanceResponse | null>(null)
+  const [isLoadingBalance, setIsLoadingBalance] = useState(false)
+  
+  // State for location performance metrics
+  const [locationMetrics, setLocationMetrics] = useState<{
+    [locationId: number]: {
+      views: number
+      budget: number
+      spent: number
+      lastUpdated: string
+      isLoading: boolean
+    }
+  }>({})
   
   // Fetch campaign history from blockchain
   const fetchCampaignHistory = async () => {
@@ -74,6 +96,51 @@ export function LocationCampaignHistory({
       setIsRefreshing(false)
     }
   }
+  
+  // Fetch campaign balance from Metal API
+  useEffect(() => {
+    const fetchCampaignBalance = async () => {
+      if (!deviceId) return
+      
+      setIsLoadingBalance(true)
+      try {
+        const balance = await getCampaignTokenBalance(String(deviceId))
+        setCampaignBalance(balance)
+        
+        // Initialize location metrics based on campaign balance
+        if (balance && locations.length > 0) {
+          // Divide campaign balance among locations proportionally
+          // This is just an example allocation - in a real app you'd have actual data
+          const totalLocations = locations.length
+          const perLocationBudget = balance.balance / totalLocations
+          
+          const newMetrics: typeof locationMetrics = {}
+          
+          locations.forEach(location => {
+            // Create random metrics for demo purposes
+            // In a real app, these would come from backend/blockchain
+            const randomSpent = Math.random() * perLocationBudget * 0.7
+            
+            newMetrics[location.deviceId] = {
+              views: Math.floor(Math.random() * 1000) + 100,
+              budget: perLocationBudget,
+              spent: randomSpent,
+              lastUpdated: new Date().toISOString(),
+              isLoading: false
+            }
+          })
+          
+          setLocationMetrics(newMetrics)
+        }
+      } catch (error) {
+        console.error("Error fetching campaign balance:", error)
+      } finally {
+        setIsLoadingBalance(false)
+      }
+    }
+    
+    fetchCampaignBalance()
+  }, [deviceId, locations])
   
   // Initial fetch
   useEffect(() => {

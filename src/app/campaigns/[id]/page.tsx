@@ -16,6 +16,8 @@ import {
   RefreshCw,
   Trash2,
   Users,
+  Wallet,
+  Plus
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -37,11 +39,26 @@ import {
 import { useBlockchainService, useBoothRegistry, usePerformanceOracle } from "@/hooks"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Campaign, CampaignMetadata } from "@/lib/blockchain"
+import { useUserStore } from "@/lib/store";
+import { Input } from "@/components/ui/input";
+
+// Add import for the new component
+import CampaignLocationBalances from "@/components/campaign/CampaignLocationBalances"
+
+// Add import for tokenomics service
+import { 
+  getUserTokenBalance, 
+  getCampaignTokenBalance, 
+  updateCampaignBudget,
+  createCampaignHolder,
+  TokenBalanceResponse
+} from "@/lib/services/tokenomics.service"
 
 export default function CampaignDetailPage() {
   const params = useParams()
   const router = useRouter()
   const campaignId = params.id as string
+  const { user } = useUserStore()
   
   const { service, isCorrectChain, switchChain } = useBlockchainService()
   const { 
@@ -54,8 +71,13 @@ export default function CampaignDetailPage() {
   
   const [mounted, setMounted] = useState(false)
   const [isReallocating, setIsReallocating] = useState(false)
+  const [isLoadingBalances, setIsLoadingBalances] = useState(false)
   const [reallocationAmount, setReallocationAmount] = useState(0)
+  const [addBudgetAmount, setAddBudgetAmount] = useState(100)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [campaignBalance, setCampaignBalance] = useState<TokenBalanceResponse | null>(null)
+  const [userBalance, setUserBalance] = useState<TokenBalanceResponse | null>(null)
+  
   const [metrics, setMetrics] = useState<{ 
     impressions: number; 
     clicks: number; 
@@ -69,23 +91,83 @@ export default function CampaignDetailPage() {
   })
   const hasFetchedRef = useRef(false)
 
-  // Fetch campaign data
+  const [isStatusChanging, setIsStatusChanging] = useState(false)
+
+  // Extract fetch balances function so it can be called from other functions
+  const fetchBalances = async () => {
+    if (!user?.walletAddress || !campaignId) return;
+    
+    setIsLoadingBalances(true);
+    try {
+      // Get user's token balance
+      const userTokenBalance = await getUserTokenBalance(user.walletAddress);
+      setUserBalance(userTokenBalance);
+      
+      // Get campaign's token balance
+      let campaignTokenBalance = await getCampaignTokenBalance(campaignId);
+      
+      // If campaign doesn't have a holder address yet, try to create one for active campaigns
+      if (!campaignTokenBalance && campaignDetails?.active) {
+        console.log("No campaign holder found, attempting to create one...");
+        
+        // Create a campaign holder
+        const holderCreated = await createCampaignHolder(campaignId);
+        
+        if (holderCreated) {
+          // Wait a moment for the data to propagate
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          
+          // Try to fetch the campaign balance again
+          campaignTokenBalance = await getCampaignTokenBalance(campaignId);
+          console.log("Campaign holder created and balance fetched:", campaignTokenBalance);
+        } else {
+          console.warn("Could not automatically create a holder for campaign");
+        }
+      }
+      
+      setCampaignBalance(campaignTokenBalance);
+      
+      // If we have campaign balance data, update the spent amount based on initial balance
+      if (campaignTokenBalance) {
+        // For spent tracking, we can't know exactly but we can estimate from starting budget
+        // This assumes the campaign details or API provides initial budget information
+        const initialBudget = parseAdditionalInfo(campaignDetails?.metadata?.additionalInfo).budget;
+        const currentBalance = campaignTokenBalance.balance || 0;
+        const estimated = Math.max(0, initialBudget - currentBalance);
+        
+        setMetrics(prev => ({
+          ...prev,
+          spent: estimated
+        }));
+      }
+    } catch (error) {
+      console.error("Error fetching balances:", error);
+      toast("Balance Error", {
+        description: "Failed to load balance information"
+      }, "error");
+    } finally {
+      setIsLoadingBalances(false);
+    }
+  };
+
+  // Fetch campaign data and balances
   useEffect(() => {
     setMounted(true)
     
     if (service && !hasFetchedRef.current && campaignId) {
-      getCampaignDetails(Number(campaignId))
-      hasFetchedRef.current = true
+      getCampaignDetails(Number(campaignId));
+      hasFetchedRef.current = true;
+      fetchBalances();
       
-      // For demo purposes, set some mock metrics
-      setMetrics({
+      // For now we still use mock impressions/clicks/conversions data
+      setMetrics(prev => ({
+        ...prev,
         impressions: Math.floor(Math.random() * 10000),
         clicks: Math.floor(Math.random() * 1000),
         conversions: Math.floor(Math.random() * 100),
-        spent: Math.floor(Math.random() * 5000),
-      })
+      }));
     }
-  }, [service, campaignId, getCampaignDetails])
+  }, [service, campaignId, getCampaignDetails, user?.walletAddress, campaignDetails?.metadata?.additionalInfo])
 
   if (!mounted || isLoadingCampaign) {
     return (
@@ -123,17 +205,49 @@ export default function CampaignDetailPage() {
 
   const handleStatusChange = async (setActive: boolean) => {
     try {
-      // This would be implemented with a contract call in production
-      toast("Status Change Attempted", { 
-        description: "Status change functionality is not implemented yet" 
-      }, "info")
+      setIsStatusChanging(true);
       
-      // Refresh campaign details
-      getCampaignDetails(Number(campaignId))
+      // Call the campaign status API endpoint to update campaign status
+      const response = await fetch(`/api/campaigns/${campaignId}/status`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ 
+          status: setActive ? 'ACTIVE' : 'PAUSED',
+          isActive: setActive
+        }),
+      });
+      
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to update campaign status');
+      }
+      
+      toast(
+        setActive ? "Campaign Activated" : "Campaign Paused", 
+        { description: setActive ? 
+          "Campaign is now active and ads will be displayed" : 
+          "Campaign is now paused and ads will not be displayed" 
+        }, 
+        "success"
+      );
+      
+      // Refresh campaign details from blockchain
+      getCampaignDetails(Number(campaignId));
+      
+      // If campaign was activated, also refresh the balance to show newly created holder data
+      if (setActive) {
+        await fetchBalances();
+      }
     } catch (error) {
+      console.error("Error updating campaign status:", error);
       toast("Update Failed", { 
         description: "Failed to update campaign status" 
-      }, "error")
+      }, "error");
+    } finally {
+      setIsStatusChanging(false);
     }
   }
 
@@ -154,44 +268,111 @@ export default function CampaignDetailPage() {
   }
 
   const handleReallocation = async () => {
-    try {
-      // This would be implemented with a contract call in production
-      toast("Reallocation Attempted", { 
-        description: "Reallocation functionality is not implemented yet" 
-      }, "info")
-
-      setIsReallocating(false)
-      setReallocationAmount(0)
-    } catch (error) {
+    if (!user?.walletAddress || !campaignId) {
       toast("Reallocation Failed", { 
-        description: "Failed to reallocate funds" 
-      }, "error")
+        description: "Missing required user data" 
+      }, "error");
+      return;
+    }
+    
+    try {
+      const operation = reallocationAmount > 0 ? 'add' : 'withdraw';
+      const amount = Math.abs(reallocationAmount);
+      
+      // Validate amounts
+      if (operation === 'add' && (!userBalance || userBalance.balance < amount)) {
+        toast("Insufficient Balance", {
+          description: "You don't have enough tokens in your wallet"
+        }, "error");
+        return;
+      }
+      
+      if (operation === 'withdraw' && (!campaignBalance || campaignBalance.balance < amount)) {
+        toast("Insufficient Campaign Balance", {
+          description: "Campaign doesn't have enough funds to withdraw this amount"
+        }, "error");
+        return;
+      }
+      
+      // If adding funds, check if campaign has a holder address
+      if (operation === 'add') {
+        // First, check if we already have a campaign balance - if not, we need to create a holder
+        if (!campaignBalance) {
+          console.log("No campaign holder found, creating one...");
+          toast("Creating campaign wallet", {
+            description: "Setting up a Metal holder for this campaign..."
+          }, "info");
+          
+          // Create a campaign holder first
+          const holderCreated = await createCampaignHolder(campaignId);
+          
+          if (!holderCreated) {
+            toast("Setup Failed", {
+              description: "Could not create a holder for this campaign"
+            }, "error");
+            return;
+          }
+          
+          // Wait a moment for the data to propagate
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+      }
+      
+      // Update campaign budget using the tokenomics service
+      const result = await updateCampaignBudget(
+        campaignId,
+        user.walletAddress, // Use wallet address as the user ID
+        user.walletAddress, // We don't have holderAddress in store, so use wallet address
+        amount,
+        operation
+      );
+      
+      if (result) {
+        // Refresh balances
+        const userTokenBalance = await getUserTokenBalance(user.walletAddress);
+        setUserBalance(userTokenBalance);
+        
+        const campaignTokenBalance = await getCampaignTokenBalance(campaignId);
+        setCampaignBalance(campaignTokenBalance);
+        
+        toast("Budget Updated", {
+          description: `Successfully ${operation === 'add' ? 'added' : 'withdrawn'} ${amount} ADC tokens ${operation === 'add' ? 'to' : 'from'} campaign`
+        }, "success");
+      }
+      
+      setIsReallocating(false);
+      setReallocationAmount(0);
+    } catch (error) {
+      console.error("Reallocation failed:", error);
+      toast("Reallocation Failed", { 
+        description: "Failed to update campaign budget" 
+      }, "error");
     }
   }
 
-  // Parse additional info for budget
+  // Parse additional info for budget - we will now use this as a fallback
   const parseAdditionalInfo = (info?: string) => {
-    if (!info) return { budget: 1000 }
+    if (!info) return { budget: campaignBalance?.balance || 1000 }
     try {
       if (info.includes('budget:')) {
         const budget = parseInt(info.split('budget:')[1].trim())
         return { budget }
       }
-      return { budget: 1000 }
+      return { budget: campaignBalance?.balance || 1000 }
     } catch (e) {
-      return { budget: 1000 }
+      return { budget: campaignBalance?.balance || 1000 }
     }
   }
   
-  // Get budget from additional info or use default
-  const { budget } = parseAdditionalInfo(campaignDetails.metadata.additionalInfo)
+  // Get budget from campaign balance or fall back to additional info
+  const budget = campaignBalance?.balance || parseAdditionalInfo(campaignDetails?.metadata?.additionalInfo).budget;
 
   // Calculate campaign metrics
-  const startDate = new Date(Number(campaignDetails.metadata.startDate) * 1000)
+  const startDate = new Date(Number(campaignDetails?.metadata?.startDate || Date.now()) * 1000)
   const endDate = new Date(startDate.getTime())
-  endDate.setDate(startDate.getDate() + campaignDetails.metadata.duration)
+  endDate.setDate(startDate.getDate() + (campaignDetails?.metadata?.duration || 30))
   
-  const daysTotal = campaignDetails.metadata.duration
+  const daysTotal = campaignDetails?.metadata?.duration || 30
   const daysElapsed = Math.ceil((new Date().getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24))
   const daysRemaining = Math.max(0, daysTotal - daysElapsed)
   const progressPercentage = Math.min(100, Math.max(0, (daysElapsed / daysTotal) * 100))
@@ -327,8 +508,22 @@ export default function CampaignDetailPage() {
                   <DollarSign className="h-5 w-5" />
                   <span className="font-bold">Budget</span>
                 </div>
-                <div className="text-lg">
-                  {budgetRemaining.toLocaleString()} / {budget.toLocaleString()} CRYPTO
+                <div className="text-lg flex justify-between items-center">
+                  <div>
+                    {budgetRemaining.toLocaleString()} / {budget.toLocaleString()} ADC
+                  </div>
+                  {!isLoadingBalances ? (
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      className="border-[2px] border-black rounded-none bg-[#0055FF] hover:bg-[#003cc7] text-white"
+                      onClick={() => setIsReallocating(true)}
+                    >
+                      <Plus className="w-4 h-4 mr-1" /> Add Funds
+                    </Button>
+                  ) : (
+                    <RefreshCw className="h-4 w-4 animate-spin" />
+                  )}
                 </div>
                 <div className="mt-2">
                   <div className="flex justify-between text-sm mb-1">
@@ -417,7 +612,7 @@ export default function CampaignDetailPage() {
                       <span className="font-bold">Cost</span>
                     </div>
                     <div className="text-2xl font-bold">
-                      {budgetSpent.toLocaleString()} CRYPTO
+                      {budgetSpent.toLocaleString()} ADC
                     </div>
                   </div>
                 </div>
@@ -459,6 +654,20 @@ export default function CampaignDetailPage() {
                     clicks, and conversions.
                   </p>
                 </div>
+
+                {/* Add the new CampaignLocationBalances component */}
+                <div className="border-[3px] border-black bg-white mb-6">
+                  <div className="border-b-[3px] border-black p-4 bg-[#0055FF] text-white">
+                    <h3 className="text-xl font-bold">Budget & Location Performance</h3>
+                    <p className="text-sm text-white/80">Real-time budget allocation and performance metrics by location</p>
+                  </div>
+                  <div className="p-4">
+                    <CampaignLocationBalances 
+                      campaignId={campaignId} 
+                      bookedLocations={campaignDetails.bookedLocations.map(Number)} 
+                    />
+                  </div>
+                </div>
               </TabsContent>
 
               <TabsContent value="creative">
@@ -479,64 +688,153 @@ export default function CampaignDetailPage() {
 
               <TabsContent value="settings">
                 <div className="border-[3px] border-black p-4 bg-white mb-6">
-                  <div className="font-bold mb-2">Budget Allocation</div>
+                  <div className="font-bold text-lg mb-2">Budget Management</div>
+                  
+                  <div className="mb-4 grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="border-[3px] border-black p-4 bg-[#f5f5f5]">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Wallet className="h-5 w-5 text-[#0055FF]" />
+                        <span className="font-bold">Your Balance</span>
+                      </div>
+                      {isLoadingBalances ? (
+                        <div className="flex items-center gap-2">
+                          <RefreshCw className="h-4 w-4 animate-spin" />
+                          <span>Loading balance...</span>
+                        </div>
+                      ) : (
+                        <div className="text-xl font-bold">
+                          {userBalance?.balance?.toLocaleString() || "0"} ADC
+                        </div>
+                      )}
+                    </div>
+                    
+                    <div className="border-[3px] border-black p-4 bg-[#f5f5f5]">
+                      <div className="flex items-center gap-2 mb-2">
+                        <DollarSign className="h-5 w-5 text-[#33CC99]" />
+                        <span className="font-bold">Campaign Balance</span>
+                      </div>
+                      {isLoadingBalances ? (
+                        <div className="flex items-center gap-2">
+                          <RefreshCw className="h-4 w-4 animate-spin" />
+                          <span>Loading balance...</span>
+                        </div>
+                      ) : (
+                        <div className="text-xl font-bold">
+                          {campaignBalance?.balance?.toLocaleString() || "0"} ADC
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  
                   <div className="mb-4">
-                    <Label className="mb-1 block">Current Budget: {budget.toLocaleString()} CRYPTO</Label>
                     <Button
                       variant="outline"
                       className="border-[2px] border-black rounded-none font-bold"
                       onClick={() => setIsReallocating(true)}
                     >
-                      Reallocate Budget
+                      Manage Campaign Budget
                     </Button>
                   </div>
 
                   {isReallocating && (
                     <div className="mt-4 border-t pt-4">
-                      <Label className="mb-1 block">Adjustment Amount</Label>
-                      <div className="flex gap-2 mb-2">
-                        <Button
-                          variant="outline"
-                          className="border-[2px] border-black rounded-none font-bold"
-                          onClick={() => setReallocationAmount(Math.max(-1000, reallocationAmount - 100))}
-                        >
-                          -100
-                        </Button>
-                        <div className="flex-1 flex items-center justify-center font-bold">
-                          {reallocationAmount > 0 ? "+" : ""}
-                          {reallocationAmount.toLocaleString()} CRYPTO
+                      <div className="bg-[#f5f5f5] border-[3px] border-black p-4 mb-4">
+                        <h3 className="font-bold mb-2">Add Funds to Campaign</h3>
+                        <p className="text-sm mb-4">Transfer tokens from your balance to this campaign.</p>
+                        
+                        <div className="mb-4">
+                          <Label className="mb-1 block">Amount to add (ADC)</Label>
+                          <div className="flex gap-2">
+                            <Input
+                              type="number"
+                              value={addBudgetAmount}
+                              onChange={(e) => setAddBudgetAmount(Math.max(0, parseInt(e.target.value) || 0))}
+                              className="border-[2px] border-black"
+                            />
+                            <Button 
+                              className="border-[2px] border-black rounded-none font-bold bg-[#0055FF] text-white"
+                              onClick={() => setReallocationAmount(addBudgetAmount)}
+                              disabled={!userBalance || userBalance.balance < addBudgetAmount}
+                            >
+                              Add Funds
+                            </Button>
+                          </div>
+                          {userBalance && userBalance.balance < addBudgetAmount && (
+                            <p className="text-red-500 text-sm mt-1">Insufficient balance</p>
+                          )}
                         </div>
-                        <Button
-                          variant="outline"
-                          className="border-[2px] border-black rounded-none font-bold"
-                          onClick={() => setReallocationAmount(Math.min(1000, reallocationAmount + 100))}
-                        >
-                          +100
-                        </Button>
+                        
+                        <h3 className="font-bold mb-2 mt-6">Withdraw Funds</h3>
+                        <p className="text-sm mb-4">Return tokens from this campaign to your balance.</p>
+                        
+                        <div className="mb-4">
+                          <Label className="mb-1 block">Amount to withdraw (ADC)</Label>
+                          <div className="flex gap-2">
+                            <Input
+                              type="number"
+                              value={Math.abs(reallocationAmount) > 0 && reallocationAmount < 0 ? Math.abs(reallocationAmount) : ""}
+                              onChange={(e) => setReallocationAmount(-Math.max(0, parseInt(e.target.value) || 0))}
+                              className="border-[2px] border-black"
+                              placeholder="Enter amount..."
+                            />
+                            <Button 
+                              className="border-[2px] border-black rounded-none font-bold bg-[#FF3366] text-white"
+                              onClick={() => setReallocationAmount(-Math.max(0, reallocationAmount))}
+                              disabled={!campaignBalance || campaignBalance.balance < Math.abs(reallocationAmount)}
+                            >
+                              Withdraw
+                            </Button>
+                          </div>
+                          {campaignBalance && campaignBalance.balance < Math.abs(reallocationAmount) && (
+                            <p className="text-red-500 text-sm mt-1">Insufficient campaign balance</p>
+                          )}
+                        </div>
                       </div>
-                      <Slider
-                        min={-1000}
-                        max={1000}
-                        step={10}
-                        value={[reallocationAmount]}
-                        onValueChange={(val) => setReallocationAmount(val[0])}
-                        className="mb-4"
-                      />
-                      <div className="flex gap-2">
-                        <Button
-                          variant="outline"
-                          className="border-[2px] border-black rounded-none font-bold"
-                          onClick={() => setIsReallocating(false)}
-                        >
-                          Cancel
-                        </Button>
-                        <Button
-                          className="border-[2px] border-black rounded-none font-bold bg-[#0055FF] text-white"
-                          onClick={handleReallocation}
-                        >
-                          Confirm Reallocation
-                        </Button>
-                      </div>
+                      
+                      {reallocationAmount !== 0 && (
+                        <div className="border-[3px] border-black p-4 bg-[#FFCC00] mb-4">
+                          <h3 className="font-bold mb-2">Confirm Transaction</h3>
+                          <p className="mb-4">
+                            You are about to {reallocationAmount > 0 ? 'add' : 'withdraw'} {Math.abs(reallocationAmount)} ADC 
+                            {reallocationAmount > 0 ? ' to' : ' from'} this campaign.
+                          </p>
+                          <div className="flex gap-2">
+                            <Button
+                              variant="outline"
+                              className="border-[2px] border-black rounded-none font-bold"
+                              onClick={() => {
+                                setReallocationAmount(0);
+                                setAddBudgetAmount(100);
+                              }}
+                            >
+                              Cancel
+                            </Button>
+                            <Button
+                              className="border-[2px] border-black rounded-none font-bold bg-black text-white"
+                              onClick={handleReallocation}
+                              disabled={isLoadingBalances}
+                            >
+                              {isLoadingBalances ? (
+                                <><RefreshCw className="w-4 h-4 mr-2 animate-spin" /> Processing...</>
+                              ) : (
+                                'Confirm Transaction'
+                              )}
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+                      
+                      <Button
+                        variant="outline"
+                        className="border-[2px] border-black rounded-none font-bold"
+                        onClick={() => {
+                          setIsReallocating(false);
+                          setReallocationAmount(0);
+                          setAddBudgetAmount(100);
+                        }}
+                      >
+                        Close Budget Management
+                      </Button>
                     </div>
                   )}
                 </div>

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
+// This endpoint finds a user by wallet address and returns their information including Metal holder
 export async function GET(req: Request) {
   try {
     const url = new URL(req.url);
@@ -15,7 +16,7 @@ export async function GET(req: Request) {
     
     // Find user by wallet address
     const user = await prisma.user.findUnique({
-      where: { walletAddress }
+      where: { walletAddress: walletAddress }
     });
     
     if (!user) {
@@ -25,27 +26,19 @@ export async function GET(req: Request) {
       );
     }
     
-    // Check if user has a holder address
-    if (!user.holderAddress) {
-      return NextResponse.json(
-        { error: "User does not have a Metal holder address" },
-        { status: 404 }
-      );
-    }
-    
-    // Return user data with holder address
+    // Return user information including holder address
     return NextResponse.json({
       id: user.id,
+      username: user.username,
       walletAddress: user.walletAddress,
       holderAddress: user.holderAddress,
-      name: user.name,
       role: user.role
     });
     
   } catch (error) {
     console.error("Error finding user:", error);
     return NextResponse.json(
-      { error: "Failed to fetch user data", details: (error as Error).message },
+      { error: "Failed to find user", details: (error as Error).message },
       { status: 500 }
     );
   }
