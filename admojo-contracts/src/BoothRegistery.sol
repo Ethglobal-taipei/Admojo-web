@@ -250,9 +250,6 @@ contract BoothRegistery {
         
         Campaign storage campaign = campaigns[_campaignId];
         
-        // Require at least one location to remain in the campaign
-        require(campaign.bookedLocations.length > 1, "Campaign must have at least one location");
-        
         // Find and remove device from campaign's locations
         bool found = false;
         for(uint i = 0; i < campaign.bookedLocations.length; i++) {
