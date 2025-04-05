@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { usePrivy } from "@privy-io/react-auth";
 import { useAdContract } from "./use-ad-contract-compat";
-import { BoothStatus , BoothMetadata } from "@/lib/blockchain";
+import { BoothStatus, BoothMetadata } from "@/lib/blockchain/types";
 // Helper function to convert string to 0x prefixed string
 function toHexString(value: string): `0x${string}` {
   if (!value.startsWith('0x')) {
