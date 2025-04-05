@@ -1,0 +1,30 @@
+---
+description: Project Overview
+globs: 
+alwaysApply: false
+---
+# AdNet Protocol
+
+AdNet Protocol is a decentralized, IoT-enabled Web3 advertising platform bridging Advertising Companies (AC) and Ad Service Providers (ASP), leveraging blockchain technology and verifiable ad analytics.
+
+## Overview
+
+The platform provides IoT-based **Proof-of-View (PoV)** via ESP32-CAM modules and **Proof-of-Tap (PoT)** via NFC-enabled (PN532) IoT devices. It ensures transparent, accountable, and performance-based distribution of advertising funds (ADC tokens) using **Metal APIs**, secure identity verification via **Self Protocol**, and real-time blockchain event handling via **Nodit** integrations.
+
+## Key Features
+
+- **ASP & AC Portals:** Separate web dashboards with seamless wallet management via Privy and Metal API.
+- **IoT Modules (ESP32-CAM & PN532 NFC):** Real-time ad analytics capturing viewer impressions (PoV) and direct user engagements (PoT).
+- **Automated Token Distribution:** Nodit Webhooks trigger automatic payouts through Metal API, ensuring timely and accurate payments based on verified metrics.
+- **Privacy-Preserving Verification:** Self Protocol enables zero-knowledge identity verification, ensuring regulatory compliance without compromising user privacy.
+
+## Technologies Integrated
+
+- **Metal:** Dynamic wallet creation, token management, automated reward distribution.
+- **Self Protocol:** Regulatory-compliant, zero-knowledge-based identity verification.
+- **Nodit:** Real-time frontend updates via blockchain event webhooks and automated backend payment triggers.
+- **Privy Wallet:** Smooth user onboarding, wallet management, and secure transactions.
+
+## Objective
+
+AdNet Protocol optimizes ad spend, increases transparency, reduces fraud, and enhances consumer engagement—transforming traditional advertising through verifiable, blockchain-based interactions.

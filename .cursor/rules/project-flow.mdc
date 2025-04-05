@@ -1,0 +1,93 @@
+---
+description: Project flow
+globs: 
+alwaysApply: false
+---
+# ✅ **AdNet Protocol User Flows
+
+## **1. Ad Service Provider (ASP) Flow**
+
+**Step 1: Registration & Verification**
+- **Action:** Signs in via **Privy Wallet**.
+- **Backend:** Privy creates user session → **Metal API** dynamically creates custodial wallet → **Self Protocol** for verification (age/country/OFAC).
+
+**Step 2: Adding Ad Locations**
+- **Action:** ASP submits new location details.
+- **Backend:** Unique ASP Location ID assigned → IoT module registered → IoT device keys securely stored for oracle verification.
+
+**Step 3: IoT Module Activation**
+- **Action:** ASP sets up ESP32-CAM & ESP32+PN532 at location.
+- **Backend:** Modules connect via MQTT → begin sending Proof-of-View (PoV) and Proof-of-Tap (PoT) data.
+
+**Step 4: Earnings Accumulation**
+- **Action:** ASP monitors earnings dashboard.
+- **Backend:** Oracle receives IoT events, writes verified data on-chain → **Nodit** listens for these on-chain events, triggers backend webhook instantly → backend calculates earnings → uses **Metal API** to credit ASP wallets automatically.
+
+**Step 5: Withdraw Earnings**
+- **Action:** ASP initiates withdrawal.
+- **Backend:** **Metal API** securely transfers ADC from custodial wallet to ASP’s external wallet.
+
+---
+
+## **2. Advertising Company (AC) Flow**
+
+**Step 1: Registration & Verification**
+- **Action:** AC signs in via **Privy Wallet**.
+- **Backend:** Privy session created → **Metal API** dynamically creates wallet → **Self Protocol** verifies AC identity.
+
+**Step 2: Fund Wallet (USDC → ADC)**
+- **Action:** AC funds wallet with USDC.
+- **Backend:** Funds deposited → backend uses **Metal API** to auto-exchange USDC into ADC tokens.
+
+**Step 3: Create Ad Campaign**
+- **Action:** AC defines campaign parameters, selects ASP locations, uploads custom URLs for airdrop/rewards.
+- **Backend:** Smart contract via **Metal API** escrow-locks ADC tokens → backend assigns IoT modules, schedules URL pushes via MQTT to PN532 NFC writer.
+
+**Step 4: Campaign Monitoring**
+- **Action:** AC views real-time analytics dashboard.
+- **Backend:** IoT events verified by oracle, written on-chain → **Nodit Webhooks** instantly notify backend → dashboard state updates in real-time.
+
+**Step 5: Campaign Completion & Settlement**
+- **Action:** Campaign ends or budget exhausted.
+- **Backend:** Final analytics via **Nodit** aggregated → backend auto-calculates payouts → triggers **Metal API** to release ADC to ASP wallets based on verified data.
+
+---
+
+## **3. Customer Flow**
+
+**Step 1: Ad Interaction**
+- **Action:** Customer views ad, taps NFC module.
+- **Backend:** PN532 module (ESP32) reveals URL → URL directs to customer engagement page.
+
+**Step 2: Identity Verification (Optional Reward Claim)**
+- **Action:** Customer performs quick verification via **Self Protocol**.
+- **Backend:** Self Protocol returns verification status (ZKP).
+
+**Step 3: Reward Distribution**
+- **Action:** Customer claims reward (ADC tokens or incentives).
+- **Backend:** Reward claim verified → **Metal API** dynamically credits tokens from AC escrow directly to customer wallet.
+
+**Step 4: Engagement & Analytics**
+- **Action:** Customer optionally continues engaging via app.
+- **Backend:** Engagement metrics anonymized, recorded → future reward offers dynamically personalized (off-chain).
+
+---
+
+## ⚙️ **Concise Backend Integration Recap**
+
+- **Privy:** User onboarding, wallet/session management.
+- **Metal:** Token creation, wallet management, escrow, automated reward distribution.
+- **Self Protocol:** Identity verification (age/country/OFAC).
+- **Nodit:**  
+  - **Trigger Payments:** Instantly triggers backend webhooks upon oracle recording new Proof-of-View/Tap on-chain events → backend calls Metal API to initiate payouts.  
+  - **Real-time Dashboard:** Webhook events from Nodit immediately update frontend dashboards with latest PoV & PoT analytics.
+- **ESP32-CAM + PN532 NFC:** IoT modules capture and verify ad interactions (PoV & PoT).
+- **ThingSpeak/MQTT/Oracle:** IoT data relay & verification pipeline.
+
+---
+
+This clearly emphasizes Nodit’s critical role:  
+- **Real-time payment triggers** (Metal API).  
+- **Instant frontend dashboard updates** (webhook-driven UI state management).  
+
+Your implementation now accurately reflects the important Web3 integrations and IoT interactions in a practical, scalable, and robust manner.

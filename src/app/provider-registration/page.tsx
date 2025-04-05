@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
-import { Check, ChevronRight, Building2, CreditCard, FileText, MapPin, Loader2, AlertCircle, Scan } from "lucide-react"
+import { Check, ChevronRight, Building2, CreditCard, FileText, Loader2, Scan } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -10,8 +10,6 @@ import { Textarea } from "@/components/ui/textarea"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { useRoleStore } from "@/lib/store"
 import { toast } from "@/lib/toast"
-import { useAdContract } from "@/hooks/use-ad-contract"
-import { usePrivy } from "@privy-io/react-auth"
 import { v4 as uuidv4 } from "uuid"
 import dynamic from "next/dynamic"
 
@@ -22,8 +20,6 @@ const SelfQRcodeWrapper = dynamic(
 )
 
 // Import types but don't actually import the module directly
-// This is just for TypeScript type checking
-type SelfAppBuilderType = import('@selfxyz/qrcode').SelfAppBuilder;
 type SelfAppOptionsType = import('@selfxyz/qrcode').SelfAppOptions;
 
 // Type definitions for component props
@@ -246,6 +242,7 @@ const VerificationStep = ({ formData, updateForm, nextStep, prevStep }: StepProp
   const [userId, setUserId] = useState<string | null>(null);
   const [selfAppInstance, setSelfAppInstance] = useState<any>(null);
   const [loadingQR, setLoadingQR] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     // Generate a user ID when the component mounts if it doesn't exist
@@ -268,18 +265,16 @@ const VerificationStep = ({ formData, updateForm, nextStep, prevStep }: StepProp
         const config: SelfAppOptionsType = {
           appName: "AdNet Protocol",
           scope: "adnet-protocol",
-          endpoint: `${window.location.origin}/api/verify`,
+          endpoint: `https://3b28-111-235-226-124.ngrok-free.app/api/verify`,
+          endpointType: "staging_https",
+          logoBase64: "https://i.imgur.com/Rz8B3s7.png",
           userId,
+          devMode: true,
           disclosures: {
-            // Request passport information
             name: true,
             nationality: true,
             date_of_birth: true,
-            
-            // Set verification rules
             minimumAge: 18,
-            excludedCountries: ["IRN", "PRK", "RUS"],
-            ofac: true,
           },
         };
 
@@ -301,7 +296,7 @@ const VerificationStep = ({ formData, updateForm, nextStep, prevStep }: StepProp
     setShowSelfQR(true);
   };
 
-  const handleSelfVerificationSuccess = (data: any) => {
+  const handleSelfVerificationSuccess = (data: Record<string, any>) => {
     console.log("Self verification successful:", data);
     
     // Update the form with verification data
@@ -310,8 +305,8 @@ const VerificationStep = ({ formData, updateForm, nextStep, prevStep }: StepProp
       selfVerificationData: {
         name: data?.credentialSubject?.name,
         nationality: data?.credentialSubject?.nationality,
-        date_of_birth: data?.credentialSubject?.date_of_birth
-      }
+        date_of_birth: data?.credentialSubject?.date_of_birth,
+      },
     });
     
     setShowSelfQR(false);
@@ -327,7 +322,6 @@ const VerificationStep = ({ formData, updateForm, nextStep, prevStep }: StepProp
   // Only render the Self QR code if userId exists and showSelfQR is true
   const renderSelfQRCode = () => {
     if (!userId || !showSelfQR) return null;
-    
     if (typeof window === 'undefined') return null;
     
     return (
@@ -373,15 +367,21 @@ const VerificationStep = ({ formData, updateForm, nextStep, prevStep }: StepProp
     );
   };
 
+  // Pass the isSubmitting state up to the parent component
+  const handleNext = () => {
+    setIsSubmitting(true);
+    nextStep();
+  };
+
   return (
     <div className="space-y-6">
       <h2 className="text-2xl font-bold">Verification</h2>
-      <p className="text-gray-600">Upload documents to verify your business identity.</p>
+      <p className="text-gray-600">Verify your identity and business. Choose one option:</p>
 
       <div className="space-y-4">
         {/* Self Protocol Verification Option */}
         <div className="mb-8">
-          <Label htmlFor="selfVerification">Identity Verification</Label>
+          <Label htmlFor="selfVerification">Identity Verification via Self</Label>
           <div className="border-[3px] border-black rounded-none p-6 mt-2 bg-blue-50">
             <div className="text-center">
               <Scan className="mx-auto h-12 w-12 text-blue-500" />
@@ -418,51 +418,58 @@ const VerificationStep = ({ formData, updateForm, nextStep, prevStep }: StepProp
           </div>
         </div>
 
-        {/* Existing Verification Options */}
-        <div>
-          <Label htmlFor="idVerification">ID Verification (Alternative)</Label>
-          <div className="border-[3px] border-black rounded-none p-6 mt-2 bg-gray-50">
-            <div className="text-center">
-              <FileText className="mx-auto h-12 w-12 text-gray-400" />
-              <p className="mt-2 text-sm text-gray-500">
-                Upload a government-issued ID (Passport, Driver&apos;s License, etc.)
-              </p>
-              <Button
-                className="mt-4 bg-white text-black border-[3px] border-black hover:bg-[#f5f5f5] transition-all font-bold py-2 h-auto rounded-none"
-                onClick={() => updateForm({ idVerified: true })}
-              >
-                Upload ID
-              </Button>
-              {formData.idVerified && (
-                <div className="mt-2 flex items-center justify-center text-green-500">
-                  <Check className="h-5 w-5 mr-1" /> Uploaded
+        {/* Render alternative verification options only if not verified via Self */}
+        {!formData.selfVerified && (
+          <>
+            <div>
+              <Label htmlFor="idVerification">ID Verification (Alternative)</Label>
+              <div className="border-[3px] border-black rounded-none p-6 mt-2 bg-gray-50">
+                <div className="text-center">
+                  <FileText className="mx-auto h-12 w-12 text-gray-400" />
+                  <p className="mt-2 text-sm text-gray-500">
+                    Upload a government-issued ID (Passport, Driver&apos;s License, etc.)
+                  </p>
+                  <Button
+                    className="mt-4 bg-white text-black border-[3px] border-black hover:bg-[#f5f5f5] transition-all font-bold py-2 h-auto rounded-none"
+                    onClick={() => updateForm({ idVerified: true })}
+                  >
+                    Upload ID
+                  </Button>
+                  {formData.idVerified && (
+                    <div className="mt-2 flex items-center justify-center text-green-500">
+                      <Check className="h-5 w-5 mr-1" /> Uploaded
+                    </div>
+                  )}
                 </div>
-              )}
+              </div>
             </div>
-          </div>
-        </div>
 
-        <div>
-          <Label htmlFor="businessVerification">Business Verification</Label>
-          <div className="border-[3px] border-black rounded-none p-6 mt-2 bg-gray-50">
-            <div className="text-center">
-              <FileText className="mx-auto h-12 w-12 text-gray-400" />
-              <p className="mt-2 text-sm text-gray-500">Upload business registration documents or proof of business</p>
-              <Button
-                className="mt-4 bg-white text-black border-[3px] border-black hover:bg-[#f5f5f5] transition-all font-bold py-2 h-auto rounded-none"
-                onClick={() => updateForm({ businessVerified: true })}
-              >
-                Upload Documents
-              </Button>
-              {formData.businessVerified && (
-                <div className="mt-2 flex items-center justify-center text-green-500">
-                  <Check className="h-5 w-5 mr-1" /> Uploaded
+            <div>
+              <Label htmlFor="businessVerification">Business Verification</Label>
+              <div className="border-[3px] border-black rounded-none p-6 mt-2 bg-gray-50">
+                <div className="text-center">
+                  <FileText className="mx-auto h-12 w-12 text-gray-400" />
+                  <p className="mt-2 text-sm text-gray-500">
+                    Upload business registration documents or proof of business
+                  </p>
+                  <Button
+                    className="mt-4 bg-white text-black border-[3px] border-black hover:bg-[#f5f5f5] transition-all font-bold py-2 h-auto rounded-none"
+                    onClick={() => updateForm({ businessVerified: true })}
+                  >
+                    Upload Documents
+                  </Button>
+                  {formData.businessVerified && (
+                    <div className="mt-2 flex items-center justify-center text-green-500">
+                      <Check className="h-5 w-5 mr-1" /> Uploaded
+                    </div>
+                  )}
                 </div>
-              )}
+              </div>
             </div>
-          </div>
-        </div>
+          </>
+        )}
 
+        {/* Terms & Conditions */}
         <div>
           <Label htmlFor="termsAgreement">Terms & Conditions</Label>
           <div className="flex items-start mt-2">
@@ -474,8 +481,7 @@ const VerificationStep = ({ formData, updateForm, nextStep, prevStep }: StepProp
               onChange={(e) => updateForm({ termsAgreed: e.target.checked })}
             />
             <Label htmlFor="termsAgreement" className="ml-2 text-sm">
-              I agree to the AdNet Provider Terms of Service and understand that my information will be verified before
-              I can list locations.
+              I agree to the AdNet Provider Terms of Service and understand that my information will be verified before I can list locations.
             </Label>
           </div>
         </div>
@@ -488,25 +494,38 @@ const VerificationStep = ({ formData, updateForm, nextStep, prevStep }: StepProp
         <Button
           onClick={prevStep}
           className="flex-1 bg-white text-black border-[3px] border-black hover:bg-[#f5f5f5] transition-all font-bold py-6 h-auto rounded-none"
+          disabled={isSubmitting}
         >
           Back
         </Button>
         <Button
-          onClick={nextStep}
-          disabled={!(formData.idVerified || formData.selfVerified) || !formData.businessVerified || !formData.termsAgreed}
+          onClick={handleNext}
+          disabled={
+            !(
+              (formData.selfVerified && formData.termsAgreed) ||
+              (!formData.selfVerified &&
+                formData.idVerified &&
+                formData.businessVerified &&
+                formData.termsAgreed)
+            ) || isSubmitting
+          }
           className="flex-1 bg-[#0055FF] text-white border-[3px] border-black hover:bg-[#003cc7] transition-all font-bold py-6 h-auto rounded-none disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          Complete Registration <ChevronRight className="ml-2 h-5 w-5" />
+          {isSubmitting ? (
+            <>
+              <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+              Submitting...
+            </>
+          ) : (
+            <>Complete Registration <ChevronRight className="ml-2 h-5 w-5" /></>
+          )}
         </Button>
       </div>
     </div>
-  )
-}
+  );
+};
 
-const SuccessStep = ({ router, transactionHash = null }: { 
-  router: any; 
-  transactionHash?: string | null;
-}) => {
+const SuccessStep = ({ router }: { router: ReturnType<typeof useRouter> }) => {
   return (
     <div className="space-y-6 text-center">
       <div className="bg-green-100 flex items-center justify-center w-20 h-20 mx-auto rounded-full">
@@ -514,24 +533,9 @@ const SuccessStep = ({ router, transactionHash = null }: {
       </div>
       <h2 className="text-2xl font-bold">Registration Complete!</h2>
       <p className="text-gray-600">
-        Congratulations! Your provider account has been successfully created and registered on-chain.
+        Congratulations! Your provider account has been successfully created.
       </p>
       
-      {transactionHash && (
-        <div className="text-left mt-6 bg-gray-50 p-4 border-2 border-gray-200 rounded-md">
-          <p className="text-sm font-medium text-gray-700 mb-1">Transaction Details:</p>
-          <div className="font-mono text-xs break-all">{transactionHash}</div>
-          <a 
-            href={`https://holesky.etherscan.io/tx/${transactionHash}`} 
-            target="_blank" 
-            rel="noopener noreferrer"
-            className="text-blue-600 hover:underline text-sm inline-block mt-2"
-          >
-            View on Etherscan
-          </a>
-        </div>
-      )}
-
       <Button
         onClick={() => router.push("/provider-dashboard")}
         className="w-full bg-[#FF3366] text-white border-[3px] border-black hover:bg-[#e0234e] transition-all font-bold py-6 h-auto rounded-none"
@@ -542,221 +546,11 @@ const SuccessStep = ({ router, transactionHash = null }: {
   )
 }
 
-const OnChainRegistrationStep = ({ 
-  formData, 
-  prevStep, 
-  completeRegistration 
-}: { 
-  formData: FormData; 
-  prevStep: () => void; 
-  completeRegistration: (hash: string) => void;
-}) => {
-  const { operations, isLoading, error, isCorrectChain, switchChain } = useAdContract();
-  const { authenticated, login } = usePrivy();
-  const [isRegistering, setIsRegistering] = useState(false);
-  
-  // Generate a metadata string from the form data
-  const generateMetadata = () => {
-    return JSON.stringify({
-      businessName: formData.businessName,
-      businessType: formData.businessType,
-      businessEmail: formData.businessEmail,
-      paymentMethod: formData.paymentMethod
-    });
-  };
-  
-  // Generate a unique device ID (just for demo purposes)
-  const generateDeviceId = () => {
-    return `0x${Math.random().toString(16).slice(2, 10)}${Math.random().toString(16).slice(2, 10)}`;
-  };
-  
-  const handleConnect = async () => {
-    try {
-      await login();
-    } catch (err) {
-      console.error("Login error:", err);
-      toast(
-        "Login Failed",
-        { description: "Failed to connect wallet. Please try again." },
-        "error"
-      );
-    }
-  };
-  
-  const handleSwitchNetwork = async () => {
-    try {
-      await switchChain();
-    } catch (err) {
-      console.error("Network switch error:", err);
-      toast(
-        "Network Switch Failed",
-        { description: "Failed to switch network. Please try manually." },
-        "error"
-      );
-    }
-  };
-  
-  const handleRegister = async () => {
-    setIsRegistering(true);
-    
-    try {
-      const metadata = generateMetadata();
-      const deviceId = generateDeviceId();
-      
-      const hash = await operations.registerProvider.execute(metadata, deviceId);
-      
-      if (hash) {
-        toast(
-          "Registration Submitted",
-          { description: "Your provider registration has been submitted to the blockchain." },
-          "success"
-        );
-        
-        // Pass the transaction hash to the success step
-        completeRegistration(hash);
-      } else {
-        throw new Error("Failed to register provider - transaction not sent");
-      }
-    } catch (err) {
-      console.error("Registration error:", err);
-      toast(
-        "Registration Failed",
-        { description: err instanceof Error ? err.message : "Unknown error" },
-        "error"
-      );
-      setIsRegistering(false);
-    }
-  };
-  
-  // Not authenticated
-  if (!authenticated) {
-    return (
-      <div className="space-y-6">
-        <h2 className="text-2xl font-bold">On-Chain Registration</h2>
-        <p className="text-gray-600">Connect your wallet to complete the provider registration on the blockchain.</p>
-        
-        <div className="bg-amber-50 border-2 border-amber-200 p-4 rounded-md mb-6">
-          <div className="flex items-start gap-3">
-            <AlertCircle className="w-5 h-5 text-amber-500 mt-1" />
-            <div>
-              <h3 className="font-medium">Wallet Connection Required</h3>
-              <p className="text-sm text-gray-600">
-                To register as a provider, you'll need to connect your wallet and submit an on-chain transaction.
-              </p>
-            </div>
-          </div>
-        </div>
-        
-        <Button
-          onClick={handleConnect}
-          className="w-full bg-[#0055FF] text-white border-[3px] border-black hover:bg-[#003cc7] transition-all font-bold py-6 h-auto rounded-none"
-        >
-          Connect Wallet
-        </Button>
-        
-        <Button
-          onClick={prevStep}
-          className="w-full bg-white text-black border-[3px] border-black hover:bg-[#f5f5f5] transition-all font-bold py-6 h-auto rounded-none"
-        >
-          Back
-        </Button>
-      </div>
-    );
-  }
-  
-  // Wrong network
-  if (!isCorrectChain) {
-    return (
-      <div className="space-y-6">
-        <h2 className="text-2xl font-bold">On-Chain Registration</h2>
-        <p className="text-gray-600">Switch to the Holesky testnet to complete your registration.</p>
-        
-        <div className="bg-red-50 border-2 border-red-200 p-4 rounded-md mb-6">
-          <div className="flex items-start gap-3">
-            <AlertCircle className="w-5 h-5 text-red-500 mt-1" />
-            <div>
-              <h3 className="font-medium">Wrong Network</h3>
-              <p className="text-sm text-gray-600">
-                Please switch to the Holesky testnet to register as a provider.
-              </p>
-            </div>
-          </div>
-        </div>
-        
-        <Button
-          onClick={handleSwitchNetwork}
-          className="w-full bg-[#0055FF] text-white border-[3px] border-black hover:bg-[#003cc7] transition-all font-bold py-6 h-auto rounded-none"
-        >
-          Switch to Holesky Testnet
-        </Button>
-        
-        <Button
-          onClick={prevStep}
-          className="w-full bg-white text-black border-[3px] border-black hover:bg-[#f5f5f5] transition-all font-bold py-6 h-auto rounded-none"
-        >
-          Back
-        </Button>
-      </div>
-    );
-  }
-  
-  return (
-    <div className="space-y-6">
-      <h2 className="text-2xl font-bold">On-Chain Registration</h2>
-      <p className="text-gray-600">Complete your provider registration on the blockchain to start earning.</p>
-      
-      <div className="bg-blue-50 border-2 border-blue-200 p-4 rounded-md mb-6">
-        <h3 className="font-medium mb-2">Ready to Register</h3>
-        <p className="text-sm text-gray-600 mb-4">
-          Your information is ready to be registered on the blockchain. This requires a transaction to be signed with your wallet.
-        </p>
-        
-        <div className="bg-white p-3 border border-gray-200 rounded text-sm">
-          <div className="grid grid-cols-2 gap-x-4 gap-y-2">
-            <div className="font-medium">Business Name:</div>
-            <div>{formData.businessName}</div>
-            
-            <div className="font-medium">Business Type:</div>
-            <div>{formData.businessType}</div>
-            
-            <div className="font-medium">Email:</div>
-            <div>{formData.businessEmail}</div>
-          </div>
-        </div>
-      </div>
-      
-      <div className="flex gap-4">
-        <Button
-          onClick={prevStep}
-          className="flex-1 bg-white text-black border-[3px] border-black hover:bg-[#f5f5f5] transition-all font-bold py-6 h-auto rounded-none"
-          disabled={isRegistering}
-        >
-          Back
-        </Button>
-        <Button
-          onClick={handleRegister}
-          className="flex-1 bg-[#0055FF] text-white border-[3px] border-black hover:bg-[#003cc7] transition-all font-bold py-6 h-auto rounded-none"
-          disabled={isRegistering || isLoading}
-        >
-          {isRegistering ? (
-            <>
-              <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-              Registering...
-            </>
-          ) : (
-            "Complete Registration"
-          )}
-        </Button>
-      </div>
-    </div>
-  );
-};
-
 export default function ProviderRegistrationPage() {
   const router = useRouter()
   const { setProviderRegistered } = useRoleStore()
   const [currentStep, setCurrentStep] = useState(1)
-  const [transactionHash, setTransactionHash] = useState<string | null>(null)
+  const [isSubmitting, setIsSubmitting] = useState(false)
   const [formData, setFormData] = useState<FormData>({
     businessName: "",
     businessType: "individual",
@@ -788,6 +582,14 @@ export default function ProviderRegistrationPage() {
       toast("Missing Information", { description: "Please enter your wallet address" }, "error")
       return
     }
+    
+    // If we're at the verification step and it's validated, submit the form
+    if (currentStep === 3 && 
+        ((formData.selfVerified && formData.termsAgreed) || 
+        (!formData.selfVerified && formData.idVerified && formData.businessVerified && formData.termsAgreed))) {
+      handleSubmitProvider();
+      return;
+    }
 
     setCurrentStep(currentStep + 1)
   }
@@ -795,19 +597,53 @@ export default function ProviderRegistrationPage() {
   const prevStep = () => {
     setCurrentStep(currentStep - 1)
   }
-
-  const completeRegistration = (hash: string) => {
-    setTransactionHash(hash);
-    setProviderRegistered(true);
-    setCurrentStep(5);
-  }
+  
+  const handleSubmitProvider = async () => {
+    try {
+      setIsSubmitting(true);
+      
+      const response = await fetch('/api/provider/register', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(formData),
+      });
+      
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to register provider');
+      }
+      
+      // Set provider as registered in the store
+      setProviderRegistered(true);
+      
+      // Move to success page
+      setCurrentStep(4);
+      
+      toast(
+        "Registration Successful",
+        { description: "Your provider account has been created successfully." },
+        "success"
+      );
+    } catch (error) {
+      console.error('Error registering provider:', error);
+      toast(
+        "Registration Failed",
+        { description: error instanceof Error ? error.message : "An unknown error occurred" },
+        "error"
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   const renderProgressSteps = () => {
     const steps = [
       { icon: Building2, label: "Business Info" },
       { icon: CreditCard, label: "Payment Setup" },
       { icon: FileText, label: "Verification" },
-      { icon: MapPin, label: "On-Chain Registration" },
     ]
 
     return (
@@ -846,7 +682,7 @@ export default function ProviderRegistrationPage() {
     <div className="container max-w-3xl mx-auto py-16 px-4">
       <h1 className="text-4xl font-black mb-8 text-center">Provider Registration</h1>
 
-      {currentStep <= 4 && renderProgressSteps()}
+      {currentStep <= 3 && renderProgressSteps()}
 
       <div className="border-[4px] border-black p-8 bg-white shadow-[8px_8px_0_0_rgba(0,0,0,1)]">
         {currentStep === 1 && <BusinessInfoStep formData={formData} updateForm={updateForm} nextStep={nextStep} />}
@@ -856,18 +692,15 @@ export default function ProviderRegistrationPage() {
         )}
         
         {currentStep === 3 && (
-          <VerificationStep formData={formData} updateForm={updateForm} nextStep={nextStep} prevStep={prevStep} />
-        )}
-        
-        {currentStep === 4 && (
-          <OnChainRegistrationStep 
+          <VerificationStep 
             formData={formData} 
+            updateForm={updateForm} 
+            nextStep={nextStep} 
             prevStep={prevStep} 
-            completeRegistration={completeRegistration} 
           />
         )}
         
-        {currentStep === 5 && <SuccessStep router={router} transactionHash={transactionHash} />}
+        {currentStep === 4 && <SuccessStep router={router} />}
       </div>
     </div>
   )

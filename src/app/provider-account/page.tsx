@@ -1,29 +1,57 @@
 "use client"
 
-import { useState } from "react"
-import { Settings, Download, TrendingUp, MapPin, Monitor, DollarSign, Award, Check } from "lucide-react"
+import { Monitor, DollarSign, Award, MapPin, TrendingUp, Loader2, Download, Check, Settings } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Progress } from "@/components/ui/progress"
-import { useUserStore, useTransactionStore } from "@/lib/store"
+import { useUserStore } from "@/lib/store" 
+import { useProvider } from "@/hooks/use-provider"
+import { useRouter } from "next/navigation"
 
 export default function ProviderAccountPage() {
-  const [activeTab, setActiveTab] = useState("overview")
+  const router = useRouter()
+  
+  // Get provider data from our hook
+  const { provider, isLoading, needsRegistration } = useProvider()
 
   // Get user data from the user store
-  const { user, balances, stats, updateUser, updateBalances } = useUserStore()
+  const { user } = useUserStore()
 
-  // Get transaction data from the transaction store
-  const { filters, isFilterOpen, toggleFilterOpen, setFilter, getFilteredTransactions } = useTransactionStore()
+  // Show loading state
+  if (isLoading) {
+    return (
+      <div className="container mx-auto px-4 py-8 flex flex-col items-center justify-center min-h-[60vh]">
+        <Loader2 className="h-12 w-12 animate-spin text-blue-500 mb-4" />
+        <p className="text-gray-500">Loading provider account...</p>
+      </div>
+    );
+  }
 
-  // Get filtered transactions
-  const filteredTransactions = getFilteredTransactions()
-
-  // Handle filter change
-  const handleFilterChange = (filterType, value) => {
-    setFilter(filterType, value)
+  // Show registration message if needed
+  if (needsRegistration) {
+    return (
+      <div className="container mx-auto px-4 py-8 relative">
+        <div className="absolute inset-0 -z-10 bg-checkered-light opacity-30"></div>
+        <div className="max-w-3xl mx-auto border-[4px] border-black p-8 bg-white shadow-[8px_8px_0_0_rgba(0,0,0,1)]">
+          <h1 className="text-3xl font-bold mb-6 text-center">Provider Account</h1>
+          <div className="text-center py-8">
+            <Monitor className="mx-auto h-16 w-16 text-gray-400 mb-4" />
+            <h2 className="text-xl font-bold mb-2">No Provider Account Found</h2>
+            <p className="text-gray-600 mb-6">
+              You need to register as a provider to access this page.
+            </p>
+            <Button 
+              onClick={() => router.push('/provider-registration')}
+              className="bg-[#0055FF] text-white border-[3px] border-black hover:bg-[#003cc7] transition-all font-bold py-6 h-auto rounded-none"
+            >
+              Register as Provider
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -42,7 +70,7 @@ export default function ProviderAccountPage() {
             <div className="flex items-center justify-between">
               <CardTitle className="text-2xl font-black">Provider Profile</CardTitle>
               <div className="px-3 py-1 bg-[#FFCC00] text-black font-bold border-[3px] border-black relative overflow-hidden">
-                <span className="relative z-10">{user?.providerTier || "STANDARD"}</span>
+                <span className="relative z-10">STANDARD</span>
                 <span className="absolute inset-0 bg-[#FFCC00] opacity-50 animate-pulse"></span>
               </div>
             </div>
@@ -65,7 +93,7 @@ export default function ProviderAccountPage() {
               <p className="text-gray-600 mb-2">@{user?.username || "guest"}</p>
               <div className="flex items-center gap-2">
                 <div className="px-2 py-1 bg-[#f5f5f5] border-[2px] border-black text-sm font-bold">Provider</div>
-                <div className="text-sm font-medium">Since {user?.providerSince || "N/A"}</div>
+                <div className="text-sm font-medium">Since {user?.memberSince || "N/A"}</div>
               </div>
             </div>
 
@@ -73,14 +101,14 @@ export default function ProviderAccountPage() {
               <div>
                 <div className="font-bold mb-1">Business Name</div>
                 <div className="border-[3px] border-black p-2 bg-[#f5f5f5]">
-                  {user?.businessName || "Not registered"}
+                  {provider?.businessName || "Not registered"}
                 </div>
               </div>
 
               <div>
                 <div className="font-bold mb-1">Business ID</div>
                 <div className="border-[3px] border-black p-2 bg-[#f5f5f5] font-mono text-sm">
-                  {user?.businessId || "Not registered"}
+                  {provider?.id || "Not registered"}
                 </div>
               </div>
 
