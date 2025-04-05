@@ -556,13 +556,12 @@ export async function getHolderTokenBalance(
       return null;
     }
     
-    // Call the Metal API endpoint
-    const response = await fetch(`/api/metal/tokenomics/balance`, {
+    // Call the Metal API endpoint with query parameters
+    const response = await fetch(`/api/metal/tokenomics/balance?holderAddress=${encodeURIComponent(holderAddress)}&tokenAddress=${encodeURIComponent(tokenAddress)}`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ holderAddress, tokenAddress }),
+      }
     });
 
     const data = await response.json();
@@ -587,6 +586,7 @@ export async function getHolderTokenBalance(
 /**
  * Gets token balance information for a user based on their wallet address.
  * This function first fetches the user's Metal holder address and then gets the token balance.
+ * If the user doesn't have a Metal holder address yet, it creates one first.
  * 
  * @param walletAddress The user's blockchain wallet address
  * @param tokenAddress The token contract address (ADC token by default)
@@ -619,6 +619,47 @@ export async function getUserTokenBalance(
 
     if (!userResponse.ok || !userData?.holderAddress) {
       console.error("Failed to find user's Metal holder address:", userData?.error);
+      
+      // If user not found or doesn't have a holder address, try to create one
+      if (userResponse.status === 404) {
+        console.log("User doesn't have a Metal holder address, creating one...");
+        
+        // Try to create a Metal holder for the user
+        const created = await createMetalHolder(
+          // Use the wallet address as user ID if we don't have a proper user ID
+          userData?.id || walletAddress,
+          walletAddress,
+          "advertiser" // Default role
+        );
+        
+        if (created) {
+          console.log("Metal holder created successfully, retrying balance fetch...");
+          
+          // Wait a moment for the data to propagate
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          
+          // Try again to fetch user data with the new holder address
+          const retryResponse = await fetch(`/api/users/find?walletAddress=${encodeURIComponent(walletAddress)}`, {
+            method: 'GET',
+            headers: {
+              'Content-Type': 'application/json',
+            }
+          });
+          
+          const retryData = await retryResponse.json();
+          
+          if (retryResponse.ok && retryData?.holderAddress) {
+            // Successfully created holder and retrieved user data
+            return getHolderTokenBalance(retryData.holderAddress, tokenAddress);
+          }
+        }
+        
+        // If creation failed or retry failed, show a message
+        toast("Metal Holder Required", { 
+          description: "Please setup your Metal holder account first" 
+        }, "warning");
+      }
+      
       return null;
     }
 

@@ -20,9 +20,15 @@ export default function DashboardHeader() {
           const tokenBalance = await getUserTokenBalance(user.walletAddress)
           if (tokenBalance) {
             setAdcBalance(tokenBalance.balance)
+          } else {
+            // If balance couldn't be fetched, show zero
+            console.log("No balance data returned, defaulting to 0")
+            setAdcBalance(0)
           }
         } catch (error) {
           console.error("Error fetching token balance:", error)
+          // On error, show a fallback value of 0
+          setAdcBalance(0)
         } finally {
           setIsLoadingBalance(false)
         }
