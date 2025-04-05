@@ -19,16 +19,20 @@ interface BoothMetrics {
 // Main function to process hourly payments
 export async function processHourlyPayments() {
   try {
-    // Get current hour time slot
+    // Get current time and calculate the previous 5-minute slot
+    // (since we run with a 2-minute buffer, we need to look at the previous slot)
     const now = new Date();
-    const hourTimeSlot = new Date(
+    const currentMinute = now.getMinutes();
+    const previousSlotMinute = Math.floor((currentMinute - 2) / 5) * 5;
+    const timeSlot = new Date(
       now.getFullYear(),
       now.getMonth(),
       now.getDate(),
-      now.getHours()
+      now.getHours(),
+      previousSlotMinute
     ).toISOString();
     
-    console.log(`Processing payments for time slot: ${hourTimeSlot}`);
+    console.log(`Processing payments for time slot: ${timeSlot} (current time: ${now.toISOString()})`);
     
     // Initialize blockchain services
     const boothRegistry = createBoothRegistryService(process.env.RPC_URL);
@@ -59,8 +63,7 @@ export async function processHourlyPayments() {
         
         // First collect metrics for all booths in this campaign
         const boothMetrics: BoothMetrics[] = [];
-        const startTime = Math.floor(new Date(hourTimeSlot).getTime() / 1000);
-        const endTime = startTime + 3600; // One hour in seconds
+        const timestamp = Math.floor(new Date(timeSlot).getTime() / 1000);
         
         // Collect metrics and booth details for all locations
         for (const deviceId of deviceIds) {
@@ -84,17 +87,20 @@ export async function processHourlyPayments() {
               continue;
             }
             
-            // Get performance metrics for this hour
-            const metrics = await performanceOracle.getAggregatedMetrics(
-              deviceId,
-              startTime,
-              endTime
-            );
+            // Get performance metrics for this 5-minute interval
+            const metrics = await performanceOracle.getMetrics(deviceId, timestamp);
+            
+            // Log the metrics for debugging
+            console.log(`Metrics for device ${deviceId} at ${timeSlot}:`, {
+              views: metrics.views,
+              taps: metrics.taps,
+              timestamp
+            });
             
             boothMetrics.push({
               deviceId,
-              views: metrics.totalViews,
-              taps: metrics.totalTaps,
+              views: metrics.views,
+              taps: metrics.taps,
               booth,
               provider
             });
@@ -103,17 +109,26 @@ export async function processHourlyPayments() {
           }
         }
         
-        // Calculate total views across all booths in this campaign
+        // Calculate total views and taps across all booths in this campaign
         const totalViews = boothMetrics.reduce((sum, metrics) => sum + metrics.views, 0);
+        const totalTaps = boothMetrics.reduce((sum, metrics) => sum + metrics.taps, 0);
         
         // Now process payments for each booth based on relative performance
         for (const metrics of boothMetrics) {
           try {
-            // Calculate payment based on views and interactions
+            // Calculate payment based on views and taps
             const viewShare = totalViews > 0 ? metrics.views / totalViews : 0;
-            const minimumPayment = Number(campaign.hourlyRate) * 0.1; // 10% minimum payment
-            const performancePayment = Number(campaign.hourlyRate) * 0.9 * viewShare; // Performance based on share of total views
-            const totalPayment = minimumPayment + performancePayment;
+            const tapShare = totalTaps > 0 ? metrics.taps / totalTaps : 0;
+            
+            // Calculate base payment (5-minute rate = hourly rate / 12)
+            const baseRate = Number(campaign.hourlyRate) / 12;
+            const minimumPayment = baseRate * 0.1; // 10% minimum payment
+            
+            // Performance payment is split between views (60%) and taps (40%)
+            const viewPerformance = baseRate * 0.9 * 0.6 * viewShare;
+            const tapPerformance = baseRate * 0.9 * 0.4 * tapShare;
+            
+            const totalPayment = minimumPayment + viewPerformance + tapPerformance;
             
             if (totalPayment > 0) {
               // Process direct payment from advertiser to provider
@@ -141,7 +156,9 @@ export async function processHourlyPayments() {
                 views: metrics.views,
                 taps: metrics.taps,
                 viewShare,
+                tapShare,
                 totalViews,
+                totalTaps,
                 payment: totalPayment
               });
             }
@@ -154,7 +171,7 @@ export async function processHourlyPayments() {
       }
     }
     
-    console.log(`Completed payment processing for time slot: ${hourTimeSlot}`);
+    console.log(`Completed payment processing for time slot: ${timeSlot}`);
     return true;
   } catch (error) {
     console.error("Error in processHourlyPayments:", error);

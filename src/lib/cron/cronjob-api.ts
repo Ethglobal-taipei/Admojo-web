@@ -156,9 +156,9 @@ export async function setupHourlyPaymentCronJob(existingJobId?: number): Promise
   const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
   const cronApiKey = process.env.PAYMENT_WEBHOOK_API_KEY || '';
   
-  // Job data for hourly payments
+  // Job data for 5-minute payments with buffer
   const jobData: JobInput = {
-    title: 'AdNet Hourly Payments',
+    title: 'AdNet 5-Minute Payments',
     url: `${baseUrl}/api/tokenomics/trigger-hourly-payments`,
     enabled: true,
     saveResponses: true,
@@ -168,7 +168,8 @@ export async function setupHourlyPaymentCronJob(existingJobId?: number): Promise
       expiresAt: 0, // Never expires
       hours: [-1], // Every hour
       mdays: [-1], // Every day of month
-      minutes: [0], // At minute 0 (top of the hour)
+      // Run 2 minutes after each 5-minute mark to allow IoT API to update metrics
+      minutes: [2, 7, 12, 17, 22, 27, 32, 37, 42, 47, 52, 57],
       months: [-1], // Every month
       wdays: [-1]  // Every day of week
     },
