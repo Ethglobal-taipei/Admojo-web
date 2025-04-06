@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { initializeWebSocket, getWebSocketStatus } from '@/lib/blockchain/websocket-manager';
+import { initializeWebSocket, getWebSocketStatus } from '../../../../.././src/lib/blockchain/websocket-manager';
 
 // API endpoint to initialize WebSocket connection
 export async function GET() {

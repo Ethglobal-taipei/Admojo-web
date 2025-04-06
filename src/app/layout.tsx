@@ -8,6 +8,7 @@ import WalletProvider from "@/components/providers/wallet-provider"
 import { BlockchainProvider } from "@/hooks"
 import { ReactNode } from "react";
 import AppWrapper from "@/components/app-wrapper";
+import '@/lib/blockchain/websocket-manager'; // Initialize WebSocket connection on server start
 
 const inter = Inter({ subsets: ["latin"] })
 
