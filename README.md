@@ -1,4 +1,4 @@
-<img width="1119" alt="Screenshot 2025-04-06 at 6 13 57 AM" src="https://github.com/user-attachments/assets/a88913e5-73fd-420d-9af1-f521e40329ba" /># 🌐 AdModule Web
+
 ### *Robust Token Management. Real-Time Events. Anonymous Analytics.*
 
 Welcome to **AdModule Web** — a detailed breakdown of your implementation-focused web platform for comprehensive ad management, seamless token operations, and privacy-preserving user analytics.
@@ -8,8 +8,8 @@ Welcome to **AdModule Web** — a detailed breakdown of your implementation-focu
 ## 🔄 Implementation Details
 
 ## Architecture
-<img width="1095" alt="Screenshot 2025-04-06 at 6 14 08 AM" src="https://github.com/user-attachments/assets/be8d9ce3-1829-4a13-a13c-b37699233684" />
 <img width="885" alt="Screenshot 2025-04-06 at 6 14 21 AM" src="https://github.com/user-attachments/assets/5a4352c5-8f63-4fe2-bbf9-97d4ac5d2160" />
+<img width="723" alt="Screenshot 2025-04-06 at 7 20 55 AM" src="https://github.com/user-attachments/assets/a6a59657-87e8-4858-adcb-27ead8e4a230" />
 
 ## UI Screenshots
 ![WhatsApp Image 2025-04-06 at 06 03 24](https://github.com/user-attachments/assets/39b0f08a-33ae-48e5-8e15-e59aa6c6fe65)
