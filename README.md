@@ -1,36 +1,106 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 🌐 AdModule Web
+### *Robust Token Management. Real-Time Events. Anonymous Analytics.*
 
-## Getting Started
+Welcome to **AdModule Web** — a detailed breakdown of your implementation-focused web platform for comprehensive ad management, seamless token operations, and privacy-preserving user analytics.
 
-First, run the development server:
+---
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+## 🔄 Implementation Details
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### 🚩 **1. Ad Service Provider (ASP)**
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+#### 🔑 **Registration & Verification**
+- ASP signs in via **Privy Wallet**, establishing a secure session.
+- Backend dynamically creates custodial wallet using **Metal API**.
+- **Self Protocol** performs secure, anonymous verification using ZKProof (age, country, OFAC compliance).
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+#### 📍 **Adding Ad Locations**
+- ASP submits new location data (address, display type, IoT details).
+- Backend assigns unique identifiers, registers IoT modules, generates cryptographic keys, and securely stores credentials.
 
-## Learn More
+#### 📡 **IoT Module Setup & Activation**
+- ASP deploys hardware (**ESP32-CAM** and **ESP32+PN532** modules).
+- Devices establish secure MQTT connections, initiating transmission of verified Proof-of-View (PoV) and Proof-of-Tap (PoT) metrics.
 
-To learn more about Next.js, take a look at the following resources:
+#### 💰 **Real-time Earnings Dashboard**
+- IoT data verified and recorded on-chain via oracle interactions.
+- **Nodit Webhooks** immediately trigger backend processes upon new data events.
+- Earnings automatically calculated and credited via **Metal API** into custodial wallets.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+#### 💸 **Withdrawal Process**
+- ASP initiates withdrawals securely via dashboard.
+- **Metal API** processes ADC token transfers to ASP’s external wallets instantly.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+---
 
-## Deploy on Vercel
+### 🎯 **2. Advertising Company (AC)**
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+#### 🔑 **Registration & Secure Verification**
+- AC securely logs in via **Privy Wallet**, session validated.
+- Backend dynamically creates wallet via **Metal API**.
+- Identity verification securely performed via **Self Protocol**.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+#### 💳 **Funding Wallet (USDC → ADC Conversion)**
+- AC deposits USDC.
+- Backend utilizes **Metal API** for instant conversion to ADC tokens.
+
+#### 📝 **Ad Campaign Creation**
+- AC defines campaign parameters (duration, budget, URLs, selected ASP locations).
+- Backend secures ADC tokens in escrow via smart contract integration.
+- Scheduled dynamic URL updates are securely pushed to IoT modules via MQTT.
+
+#### 📊 **Real-Time Campaign Monitoring**
+- Oracle-verified IoT data continuously recorded on-chain.
+- Backend immediately updates dashboards via **Nodit Webhooks** upon receiving event notifications.
+
+#### 📦 **Campaign Settlement & Token Distribution**
+- Backend aggregates final analytics using on-chain data via Nodit.
+- **Metal API** automates token distribution to ASP wallets based on verified performance metrics.
+
+---
+
+### 🙋 **3. End-User Interaction & Analytics**
+
+#### 📱 **NFC Ad Interaction**
+- User taps NFC module, instantly redirected to campaign-specific engagement URL.
+
+#### ✅ **Anonymous Verification via Self Protocol**
+- User undergoes rapid, anonymous verification through Self Protocol’s ZKProof technology.
+- Privacy-preserving demographic data securely collected and aggregated.
+
+#### 🎁 **Reward Claim & Distribution**
+- User securely claims rewards.
+- Backend verifies reward eligibility and uses **Metal API** to directly credit user wallets from escrow funds.
+
+#### 📈 **Ongoing Anonymous Engagement Analytics**
+- Backend continuously anonymizes and securely records engagement metrics.
+- Future reward strategies dynamically personalized, while strictly preserving user privacy.
+
+---
+
+## ⚙️ Technical Stack & Integrations
+
+- **Frontend:** Next.js, TailwindCSS, TypeScript
+- **Backend & APIs:** Node.js backend, **Metal API**, **Privy Wallet** session management
+- **Verification:** **Self Protocol** leveraging ZKProof for secure, anonymous demographic verification
+- **Event Triggers & Data Processing:** **Nodit Webhooks**, Oracle integration for real-time on-chain data capture
+- **IoT Integration:** ESP32-CAM, ESP32 WROOM with PN532 NFC, MQTT for reliable IoT event transmission
+
+---
+
+## 🚀 Next Steps & Enhancements
+
+- Advanced integration of Self Protocol for granular analytics.
+- Fully automated payout processes based on live campaign analytics.
+- Expansion of IoT capabilities for clustered deployments in high-traffic locations.
+
+---
+
+## 📅 Why Choose AdModule Web?
+
+- **Robust Integration:** Efficient token operations and secure event-driven infrastructure.
+- **Immediate Insights:** Real-time IoT events instantly reflected across dashboards.
+- **User Privacy First:** Secure demographic analytics without compromising anonymity.
+- **Transparent Operations:** Fully auditable blockchain-backed token management.
+
+> **AdModule Web** — Precision-built, integration-rich, privacy-preserving.
